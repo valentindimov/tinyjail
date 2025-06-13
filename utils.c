@@ -1,0 +1,46 @@
+#include <stdarg.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdio.h>
+#include <alloca.h>
+
+#include "tinyjail.h"
+#include "utils.h"
+#include "logging.h"
+
+int tinyjailWriteFileAt(int dirfd, const char* filePath, const char* format, ...) {
+    // Format the file data into an in-memory string
+    va_list argptr;
+    va_start(argptr, format);
+    int szData = vsnprintf("", 0, format, argptr);
+    va_end(argptr);
+    char* fileData = (char*) alloca((szData + 1) * sizeof(char));
+    va_start(argptr, format);
+    vsnprintf(fileData, szData + 1, format, argptr);
+    va_end(argptr);
+
+    // Write the formatted data into the file
+    int fd = openat(dirfd, filePath, O_WRONLY);
+    if (fd < 0) {
+        tinyjailLogError("Failed to open file %s: %s", filePath, strerror(errno));
+        return -1; 
+    }
+    int nbytes = strlen(fileData);
+    while (nbytes > 0) {
+        int numWrittenBytes = write(fd, fileData, nbytes);
+        if (numWrittenBytes < 0) {
+            tinyjailLogError("Failed to write to file %s: %s", filePath, strerror(errno));
+            close(fd);
+            return -1;
+        } else {
+            nbytes -= numWrittenBytes;
+            fileData += numWrittenBytes;
+        }
+    }
+    close(fd);
+
+    // done
+    return 0;
+}

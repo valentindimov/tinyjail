@@ -14,16 +14,8 @@ struct tinyjailContainerParams {
     // TODO implement this
     char* lowerDirs; // sudo mount -t overlay overlay -olowerdir=./lower:./lower2,upperdir=./upper,workdir=./work ./upper
 
-    /// @brief Maximum CPU Percentage that the container can use, 1-100. 0 means no limit.
-    unsigned long cpuMaxPercent;
-    /// @brief Proportional weight of CPU usage allocated to the container (100-10000). 0 means none.
-    unsigned long cpuWeight;
-    /// @brief Soft maximum of the memory the container may use (in bytes). O means no limit.
-    unsigned long memoryHigh;
-    /// @brief Hard maximum of the memory the container may use (in bytes). 0 means no limit.
-    unsigned long memoryMax;
-    /// @brief Maximum number of tasks (PIDs) allowed inside the container. 0 means no limit.
-    unsigned long pidsMax;
+    /// @brief NULL-terminated list of "filename=value" strings that specify cgroup options like resource limits.
+    char** cgroupOptions;
 
     /// @brief If networkBridgeName is not NULL, create a vEth interface in the container and connect it to this bridge.
     char* networkBridgeName;

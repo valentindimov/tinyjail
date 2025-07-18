@@ -10,6 +10,21 @@
 #include "utils.h"
 #include "logging.h"
 
+int stringIsRegularFilename(const char* filename) {
+    // Disallow the special filenames "." and ".."
+    if (strcmp(filename, ".") == 0 || strcmp(filename, "..") == 0) {
+        return 0;
+    }
+    // Reject any string containing slashes
+    while(*filename) {
+        if (*filename == '/') {
+            return 0;
+        }
+        filename++;
+    }
+    return 1;
+}
+
 int tinyjailWriteFileAt(int dirfd, const char* filePath, const char* format, ...) {
     // Format the file data into an in-memory string
     va_list argptr;

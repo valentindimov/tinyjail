@@ -15,3 +15,10 @@
 /// @param fileData String to write to the file.
 /// @return 0 on success, -1 on failure.
 int tinyjailWriteFileAt(int dirfd, const char* filePath, const char* format, ...);
+
+/// @brief Checks if a given string represents a filename (not a path) which is not "." or ".."
+/// @param filename The filename to check
+/// @return 1 if the string represents a regular filename, and 0 if it does not.
+/// Generally you can use this function to see if a user-supplied filename is safe to use.
+/// The function will reject filenames which can cause path traversal.
+int stringIsRegularFilename(const char* filename);

@@ -23,23 +23,42 @@ static int configureCgroup(
     if (fchownat(cgroupPathFd, "cgroup.subtree_control", uid, gid, 0) != 0) { tinyjailLogError("Failed to change ownership on cgroup.subtree_control: %s\n", strerror(errno)); return -1; }
     if (fchownat(cgroupPathFd, "cgroup.threads", uid, gid, 0) != 0) { tinyjailLogError("Failed to change ownership on cgroup.threads: %s\n", strerror(errno)); return -1; }
 
-    // Set up resource limits
-    if (containerParams->cpuMaxPercent > 0) {
-        if (tinyjailWriteFileAt(cgroupPathFd, "cpu.max", "%lu000 100000", containerParams->cpuMaxPercent) != 0) { tinyjailLogError("Failed to set up cpu.max in cgroup: %s\n", strerror(errno)); return -1; }
+    // Apply cgroup configuration options
+    for (char** curOptPtr = containerParams->cgroupOptions; *curOptPtr != NULL; curOptPtr++) {
+        // Make a copy of the option and make sure it's null-terminated
+        // Later on we'll replace the first "=" in this copy with a NULL.
+        // The first part (before the NULL) will be the filename in the cgroup folder
+        // The second part (after the NULL) will be the contents to write there
+        unsigned long szOptionStr = strlen(*curOptPtr) + 1;
+        char* filename = alloca(szOptionStr);
+        memset(filename, 0, szOptionStr);
+        strncpy(filename, *curOptPtr, szOptionStr - 1);
+
+        // Start from the beginning of the string and iterate until the string ends, or we find '='
+        char* contents = filename;
+        while (*contents != '\0' && *contents != '=') {
+            contents++;
+        }
+        if (*contents == '=') {
+            // Found '=', replace it with a NULL and use the remainder of the string as contents.
+            *contents = '\0';
+            contents++;
+            if (!stringIsRegularFilename(filename)) {
+                // Make sure we only try writing to files in the cgroup directory
+                tinyjailLogError("Invalid cgroups option: %s", filename);
+                return -1;
+            }
+            if (tinyjailWriteFileAt(cgroupPathFd, filename, "%s", contents) != 0) {
+                tinyjailLogError("Could not write %s to %s: %s", filename, contents, strerror(errno));
+                return -1;
+            }
+        } else {
+            // We did not find an '=' sign, the string was malformed
+            tinyjailLogError("Malformed cgroup option: %s", *curOptPtr);
+            return 1;
+        }
     }
-    if (containerParams->cpuWeight > 0) {
-        if (tinyjailWriteFileAt(cgroupPathFd, "cpu.weight", "%lu", containerParams->cpuWeight) != 0) { tinyjailLogError("Failed to set up cpu.weight in cgroup: %s\n", strerror(errno)); return -1; }
-    }
-    if (containerParams->memoryHigh > 0) {
-        if (tinyjailWriteFileAt(cgroupPathFd, "memory.high", "%lu", containerParams->memoryHigh) != 0) { tinyjailLogError("Failed to set up memory.high in cgroup: %s\n", strerror(errno)); return -1; }
-    }
-    if (containerParams->memoryMax > 0) {
-        if (tinyjailWriteFileAt(cgroupPathFd, "memory.max", "%lu", containerParams->memoryMax) != 0) { tinyjailLogError("Failed to set up memory.max in cgroup: %s\n", strerror(errno)); return -1; }
-    }
-    if (containerParams->pidsMax > 0) {
-        if (tinyjailWriteFileAt(cgroupPathFd, "pids.max", "%lu", containerParams->pidsMax) != 0) { tinyjailLogError("Failed to set up pids.max in cgroup: %s\n", strerror(errno)); return -1; }
-    }
-    
+
     // Move the child process to the cgroup
     if (tinyjailWriteFileAt(cgroupPathFd, "cgroup.procs", "%d", childPid) != 0) { tinyjailLogError("Failed to add process to cgroup cgroup: %s\n", strerror(errno)); return -1; }
 

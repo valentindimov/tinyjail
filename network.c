@@ -12,10 +12,7 @@
 #include "utils.h"
 #include "network.h"
 
-// I would love to do all of this without invoking system(), but doing so means talking to the kernel directly via rtnetlink.
-// Unfortunately rtnetlink is, to say it in the nicest way I can, severely underdocumented. The documentation alone is insufficient even for basic operations,
-// and for basically all of the operations below, you'd have to dig through kernel code or other open source programs' code to figure out what you need to do.
-// The fact that Rust has an easy-to-use library for that same purpose proves that Rust is superior in every way: https://docs.rs/rtnetlink/latest/rtnetlink/
+// TODO: Challenge accepted (and postponed until I have time to learn how to use rtnetlink), do all of this without invoking the iproute2 tool
 
 static int createVethPair(char* if1, char* if2) {
     ALLOC_LOCAL_FORMAT_STRING(command, "ip link add dev %s type veth peer %s", if1, if2);

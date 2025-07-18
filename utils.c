@@ -8,7 +8,6 @@
 
 #include "tinyjail.h"
 #include "utils.h"
-#include "logging.h"
 
 int stringIsRegularFilename(const char* filename) {
     // Disallow the special filenames "." and ".."
@@ -39,14 +38,12 @@ int tinyjailWriteFileAt(int dirfd, const char* filePath, const char* format, ...
     // Write the formatted data into the file
     int fd = openat(dirfd, filePath, O_WRONLY);
     if (fd < 0) {
-        tinyjailLogError("Failed to open file %s: %s", filePath, strerror(errno));
         return -1; 
     }
     int nbytes = strlen(fileData);
     while (nbytes > 0) {
         int numWrittenBytes = write(fd, fileData, nbytes);
         if (numWrittenBytes < 0) {
-            tinyjailLogError("Failed to write to file %s: %s", filePath, strerror(errno));
             close(fd);
             return -1;
         } else {

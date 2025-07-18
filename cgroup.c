@@ -7,7 +7,6 @@
 #include <fcntl.h>
 
 #include "utils.h"
-#include "logging.h"
 #include "cgroup.h"
 
 static int configureCgroup(
@@ -15,13 +14,26 @@ static int configureCgroup(
     int childPid,
     unsigned int uid, 
     unsigned int gid, 
-    const struct tinyjailContainerParams* containerParams
+    const struct tinyjailContainerParams* containerParams,
+    struct tinyjailContainerResult *result
 ) {
     // Set up delegation
-    if (fchownat(cgroupPathFd, ".", uid, gid, 0) != 0) { tinyjailLogError("Failed to change ownership on cgroup: %s\n", strerror(errno)); return -1; }
-    if (fchownat(cgroupPathFd, "cgroup.procs", uid, gid, 0) != 0) { tinyjailLogError("Failed to change ownership on cgroup.procs: %s\n", strerror(errno)); return -1; }
-    if (fchownat(cgroupPathFd, "cgroup.subtree_control", uid, gid, 0) != 0) { tinyjailLogError("Failed to change ownership on cgroup.subtree_control: %s\n", strerror(errno)); return -1; }
-    if (fchownat(cgroupPathFd, "cgroup.threads", uid, gid, 0) != 0) { tinyjailLogError("Failed to change ownership on cgroup.threads: %s\n", strerror(errno)); return -1; }
+    if (fchownat(cgroupPathFd, ".", uid, gid, 0) != 0) {
+        result->errorInfo = "Failed to change the owner of the container cgroup";
+        return -1; 
+    }
+    if (fchownat(cgroupPathFd, "cgroup.procs", uid, gid, 0) != 0) { 
+        result->errorInfo = "Failed to change the owner of the container cgroup.procs";
+        return -1; 
+    }
+    if (fchownat(cgroupPathFd, "cgroup.subtree_control", uid, gid, 0) != 0) {
+        result->errorInfo = "Failed to change the owner of the container cgroup.subtree_control";
+        return -1; 
+    }
+    if (fchownat(cgroupPathFd, "cgroup.threads", uid, gid, 0) != 0) {
+        result->errorInfo = "Failed to change the owner of the container cgroup.threads";
+        return -1; 
+    }
 
     // Apply cgroup configuration options
     for (char** curOptPtr = containerParams->cgroupOptions; *curOptPtr != NULL; curOptPtr++) {
@@ -45,32 +57,46 @@ static int configureCgroup(
             contents++;
             if (!stringIsRegularFilename(filename)) {
                 // Make sure we only try writing to files in the cgroup directory
-                tinyjailLogError("Invalid cgroups option: %s", filename);
+                result->errorInfo = "You specified an invalid cgroups option name.";
                 return -1;
             }
             if (tinyjailWriteFileAt(cgroupPathFd, filename, "%s", contents) != 0) {
-                tinyjailLogError("Could not write %s to %s: %s", filename, contents, strerror(errno));
+                result->errorInfo = "Could not apply one of the cgroups options. Make sure that the option exists and belongs to a controller which is enabled in /sys/fs/cgroup/cgroup.subtree_control";
                 return -1;
             }
         } else {
             // We did not find an '=' sign, the string was malformed
-            tinyjailLogError("Malformed cgroup option: %s", *curOptPtr);
+            result->errorInfo = "You specified a cgroups option without a value.";
             return 1;
         }
     }
 
     // Move the child process to the cgroup
-    if (tinyjailWriteFileAt(cgroupPathFd, "cgroup.procs", "%d", childPid) != 0) { tinyjailLogError("Failed to add process to cgroup cgroup: %s\n", strerror(errno)); return -1; }
+    if (tinyjailWriteFileAt(cgroupPathFd, "cgroup.procs", "%d", childPid) != 0) { 
+        result->errorInfo = "Could not move the container process to the container cgroup.";
+        return -1; 
+    }
 
     return 0;
 }
 
-int tinyjailSetupContainerCgroup(char* containerId, int childPid, unsigned int uid, unsigned int gid, struct tinyjailContainerParams* containerParams) {
+int tinyjailSetupContainerCgroup(
+    char* containerId, 
+    int childPid, 
+    unsigned int uid, 
+    unsigned int gid, 
+    struct tinyjailContainerParams* containerParams,
+    struct tinyjailContainerResult* result
+) {
     ALLOC_LOCAL_FORMAT_STRING(containerCgroupPath, "/sys/fs/cgroup/container_%s", containerId);
-    if (mkdir(containerCgroupPath, 0770) != 0) { tinyjailLogError("Failed to create cgroup %s: %s\n", containerCgroupPath, strerror(errno)); } else {
+    if (mkdir(containerCgroupPath, 0770) != 0) {
+        result->errorInfo = "Could not create cgroup for the container. Make sure /sys/fs/cgroup is mounted.";
+    } else {
         int cgroupPathFd = open(containerCgroupPath, 0);
-        if (cgroupPathFd < 0) { tinyjailLogError("Failed to open cgroup %s: %s\n", containerCgroupPath, strerror(errno)); } else {
-            if (configureCgroup(cgroupPathFd, childPid, uid, gid, containerParams) == 0) {
+        if (cgroupPathFd < 0) {
+            result->errorInfo = "Created a cgroup, but could not open it. You might not have permission for it";
+        } else {
+            if (configureCgroup(cgroupPathFd, childPid, uid, gid, containerParams, result) == 0) {
                 // SUCCESS CASE CLEANUP
                 close(cgroupPathFd);
                 return 0;

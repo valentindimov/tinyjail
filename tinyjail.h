@@ -8,7 +8,7 @@ struct tinyjailContainerParams {
     char** commandList;
     /// @brief envp (NULL-terminated list of KEY=VALUE strings) for the container init process
     char** environment;
-    
+
     /// @brief Working directory for the container init process. If set to NULL, it will be "/"
     char* workDir;
 
@@ -29,6 +29,13 @@ struct tinyjailContainerParams {
     char* networkDefaultRoute;
 };
 
-extern void (*tinyjailErrorLogFunc)(const char*);
+struct tinyjailContainerResult {
+    /// @brief Set to 0 if the container was started successfully, and nonzero otherwise
+    int containerStartedStatus;
+    /// @brief If the container started successfully, this stores its exit status (as written by waitpid()).
+    int containerExitStatus;
+    /// @brief Static string with a more detailed error description, if available. Do not free this.
+    char* errorInfo;
+};
 
-__attribute__ ((visibility ("default"))) int tinyjailLaunchContainer(struct tinyjailContainerParams programArgs);
+__attribute__ ((visibility ("default"))) struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerParams programArgs);

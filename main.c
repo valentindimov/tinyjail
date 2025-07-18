@@ -86,5 +86,21 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    return tinyjailLaunchContainer(programArgs);
+    struct tinyjailContainerResult result = tinyjailLaunchContainer(programArgs);
+    if (result.containerStartedStatus != 0) {
+        fprintf(
+            stderr, 
+            "Error when starting container: %s\n", 
+            result.errorInfo == NULL ? "(no error info)" : result.errorInfo
+        );
+        return -1;
+    } else if (WIFEXITED(result.containerExitStatus)) {
+        return WEXITSTATUS(result.containerExitStatus);
+    } else if (WIFSIGNALED(result.containerExitStatus)) {
+        fprintf(stderr, "Container killed by signal %d\n", WTERMSIG(result.containerExitStatus));
+        return -1;
+    } else {
+        fprintf(stderr, "Container exit info: %x", result.containerExitStatus);
+        return -1;
+    }
 }

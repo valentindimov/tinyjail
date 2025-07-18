@@ -12,46 +12,53 @@
 #include "tinyjail.h"
 #include "utils.h"
 #include "network.h"
-#include "logging.h"
 #include "cgroup.h"
 #include "userns.h"
 #include "child.h"
 
-int tinyjailLaunchContainer(struct tinyjailContainerParams containerParams) {
+struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerParams containerParams) {
+    struct tinyjailContainerResult result = {0};
+    
     int childPid = -1;
 
     // Validate container parameters
-    if (!containerParams.commandList) { 
-        tinyjailLogError("containerParams missing required parameter: commandList.");
-        return -1;
+    if (!containerParams.commandList) {
+        result.containerStartedStatus = -1;
+        result.errorInfo = "containerParams missing required parameter: commandList.";
+        return result;
     }
-    if (!containerParams.containerDir) { 
-        tinyjailLogError("containerParams missing required parameter: containerDir.");
-        return -1;
+    if (!containerParams.containerDir) {
+        result.containerStartedStatus = -1;
+        result.errorInfo = "containerParams missing required parameter: containerDir.";
+        return result;
     }
-    if (!containerParams.environment) { 
-        tinyjailLogError("containerParams missing required parameter: environment.");
-        return -1;
+    if (!containerParams.environment) {
+        result.containerStartedStatus = -1;
+        result.errorInfo = "containerParams missing required parameter: environment.";
+        return result;
     }
-    if (containerParams.networkBridgeName && containerParams.networkPeerIpAddr) { 
-        tinyjailLogError("containerParams cannot have both networkBridgeName and networkPeerIPAddr set.");
-        return -1;
+    if (containerParams.networkBridgeName && containerParams.networkPeerIpAddr) {
+        result.containerStartedStatus = -1;
+        result.errorInfo = "containerParams cannot have both networkBridgeName and networkPeerIPAddr set.";
+        return result;
     }
 
     // Determine the UID and GID for the container as the owner of the container directory
     struct stat containerDirStat;
-    if (stat(containerParams.containerDir, &containerDirStat) != 0) { 
-        tinyjailLogError("Could not stat container directory %s: %d", containerParams.containerDir, strerror(errno));
-        return -1;
+    if (stat(containerParams.containerDir, &containerDirStat) != 0) {
+        result.containerStartedStatus = -1;
+        result.errorInfo = "Could not stat the chosen container directory. It may be missing, or you may not have permission to stat it.";
+        return result;
     }
     unsigned int uid = containerDirStat.st_uid;
     unsigned int gid = containerDirStat.st_gid;
     
     // Set up the sync pipe for signalling the child process to begin execution
     int syncPipe[2] = { -1, -1 };
-    if (pipe(syncPipe) != 0) { 
-        tinyjailLogError("Could not set up sync pipe: %s", strerror(errno));
-        return -1;
+    if (pipe(syncPipe) != 0) {
+        result.containerStartedStatus = -1;
+        result.errorInfo = "Call to pipe() failed. Cannot set up synchronization.";
+        return result;
     }
     int syncPipeWrite = syncPipe[1];
 
@@ -87,44 +94,40 @@ int tinyjailLaunchContainer(struct tinyjailContainerParams containerParams) {
             cloneFlags,
             (void*) &args
         );
-        if (childPid < 0) { 
-            tinyjailLogError("Could not launch child process: %s", strerror(errno));
-        }
         close(syncPipeRead);
+        if (childPid < 0) { 
+            close(syncPipeWrite);
+            result.containerStartedStatus = -1;
+            result.errorInfo = "Could not launch container: clone() failed.";
+            return result;
+        }
     }
 
     // Limit the container ID to 12 characters since it's used to generate names for the network interfaces (which are capped at 15 characters)
     unsigned long random;
     getrandom(&random, sizeof(random), 0);
     ALLOC_LOCAL_FORMAT_STRING(containerId, "tj_%lx", random & 0xffffffffff);
-    int childExitInfo = 0;
 
-    int retval = 0;
     if (
         childPid < 0
-        || tinyjailSetupContainerCgroup(containerId, childPid, uid, gid, &containerParams) != 0
-        || tinyjailSetupContainerUserNamespace(childPid, uid, gid) != 0
-        || tinyjailSetupContainerNetwork(childPid, containerId, &containerParams) != 0
+        || tinyjailSetupContainerCgroup(containerId, childPid, uid, gid, &containerParams, &result) != 0
+        || tinyjailSetupContainerUserNamespace(childPid, uid, gid, &result) != 0
+        || tinyjailSetupContainerNetwork(childPid, containerId, &containerParams, &result) != 0
         || write(syncPipeWrite, "OK", 2) != 2 // TODO: logError("Could not give the child the go-ahead signal: %s", strerror(errno))
-        || waitpid(childPid, &childExitInfo, __WALL) < 0 // TODO: logError("waitpid() failed: %s", strerror(errno)); 
+        || waitpid(childPid, &(result.containerExitStatus), __WALL) < 0 // TODO: logError("waitpid() failed: %s", strerror(errno)); 
     ) {
         kill(childPid, SIGKILL);
-        retval = -1;
-    } else {
-        // Container ran and exited - determine the exit status
-        if (WIFEXITED(childExitInfo)) {
-            retval = WEXITSTATUS(childExitInfo); 
-            if (retval != 0) {
-                tinyjailLogError("Container exited with nonzero exit code: %d", retval);
-            }
-        } else if (WIFSIGNALED(childExitInfo)) {
-            tinyjailLogError("Container killed by signal: %d", WTERMSIG(childExitInfo));
-        }
+        close(syncPipeWrite);
+        tinyjailDestroyCgroup(containerId);
+        // The subroutines should have set an error message already
+        result.containerStartedStatus = -1;
+        return result;
     }
     // As we clean up, make sure to vacuum up any leftover child processes
+    int tmp;
+    while (wait(&tmp) > 0) {}
     close(syncPipeWrite);
-    while (wait(&childExitInfo) > 0) {}
     tinyjailDestroyCgroup(containerId);
 
-    return retval;
+    return result;
 }

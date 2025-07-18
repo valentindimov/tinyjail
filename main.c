@@ -15,46 +15,52 @@ int parseArgs(char** argv, struct tinyjailContainerParams *parsedArgs, char** en
 
     parsedArgs->environment = envStringsBuffer;
 
-    char** argparse = argv + 1;
-    while (*argparse != NULL) {
-        char* command = *(argparse++);
-        if (*argparse == NULL) {
+    char** currentArg = argv + 1;
+    while (*currentArg != NULL) {
+        char* command = *(currentArg++);
+        if (*currentArg == NULL) {
             return -1;
         }
 
         if (strcmp(command, "--") == 0) {
-            parsedArgs->commandList = argparse;
+            parsedArgs->commandList = currentArg;
             break;
         } else if (strcmp(command, "--root") == 0) {
-            parsedArgs->containerDir = *(argparse++);
+            parsedArgs->containerDir = *(currentArg++);
         } else if (strcmp(command, "--env") == 0) {
-            *(envStringsBuffer++) = *(argparse++);
-        }  else if (strcmp(command, "--workdir") == 0) {
-            parsedArgs->workDir = *(argparse++);
+            *(envStringsBuffer++) = *(currentArg++);
+        } else if (strcmp(command, "--workdir") == 0) {
+            parsedArgs->workDir = *(currentArg++);
+        } else if (strcmp(command, "--lowerdirs") == 0) {
+            parsedArgs->lowerDirs = *(currentArg++);
         } else if (strcmp(command, "--cpu-max-percent") == 0) {
-            parsedArgs->cpuMaxPercent = strtoul(*(argparse++), NULL, 0);
+            parsedArgs->cpuMaxPercent = strtoul(*currentArg, NULL, 0);
             if (parsedArgs->cpuMaxPercent > 100) {
+                printf("Invalid --cpu-max-percent: %s", *currentArg);
                 return -1;
             }
+            currentArg++;
         } else if (strcmp(command, "--cpu-weight") == 0) {
-            parsedArgs->cpuWeight = strtoul(*(argparse++), NULL, 0);
+            parsedArgs->cpuWeight = strtoul(*currentArg, NULL, 0);
             if (parsedArgs->cpuWeight < 100 || parsedArgs->cpuWeight > 10000) {
+                printf("Invalid --cpu-weight: %s", *currentArg);
                 return -1;
             }
+            currentArg++;
         } else if (strcmp(command, "--memory-high") == 0) {
-            parsedArgs->memoryHigh = strtoul(*(argparse++), NULL, 0);
+            parsedArgs->memoryHigh = strtoul(*(currentArg++), NULL, 0);
         } else if (strcmp(command, "--memory-max") == 0) {
-            parsedArgs->memoryMax = strtoul(*(argparse++), NULL, 0);
+            parsedArgs->memoryMax = strtoul(*(currentArg++), NULL, 0);
         } else if (strcmp(command, "--pids-max") == 0) {
-            parsedArgs->pidsMax = strtoul(*(argparse++), NULL, 0);
+            parsedArgs->pidsMax = strtoul(*(currentArg++), NULL, 0);
         } else if (strcmp(command, "--network-bridge") == 0) {
-            parsedArgs->networkBridgeName = *(argparse++);
+            parsedArgs->networkBridgeName = *(currentArg++);
         } else if (strcmp(command, "--ip-address") == 0) {
-            parsedArgs->networkIpAddr = *(argparse++);
+            parsedArgs->networkIpAddr = *(currentArg++);
         } else if (strcmp(command, "--default-route") == 0) {
-            parsedArgs->networkDefaultRoute = *(argparse++);
+            parsedArgs->networkDefaultRoute = *(currentArg++);
         } else {
-            printf("Unknown: %s.\n", command);
+            printf("Unknown argument: %s.\n", command);
             return -1;
         }
     }

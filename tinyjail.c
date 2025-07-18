@@ -84,7 +84,7 @@ int tinyjailLaunchContainer(struct tinyjailContainerParams containerParams) {
         childPid < 0
         || tinyjailSetupContainerCgroup(containerId, childPid, uid, gid, &containerParams) != 0
         || tinyjailSetupContainerUserNamespace(childPid, uid, gid) != 0
-        || (containerParams.networkBridgeName && tinyjailSetupContainerNetwork(childPid, containerId, &containerParams) != 0)
+        || tinyjailSetupContainerNetwork(childPid, containerId, &containerParams) != 0
         || write(syncPipeWrite, "OK", 2) != 2 // TODO: logError("Could not give the child the go-ahead signal: %s", strerror(errno))
         || waitpid(childPid, &childExitInfo, __WALL) < 0 // TODO: logError("waitpid() failed: %s", strerror(errno)); 
     ) {
@@ -92,7 +92,7 @@ int tinyjailLaunchContainer(struct tinyjailContainerParams containerParams) {
         retval = -1;
     } else {
         // Container ran and exited - determine the exit status
-        if (WIFEXITED(childExitInfo)) { 
+        if (WIFEXITED(childExitInfo)) {
             retval = WEXITSTATUS(childExitInfo); 
             if (retval != 0) {
                 tinyjailLogError("Container exited with nonzero exit code: %d", retval);

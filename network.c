@@ -57,6 +57,11 @@ static int enterNetworkNamespace(int namespaceFd) {
 }
 
 int tinyjailSetupContainerNetwork(int childPid, char* containerId, struct tinyjailContainerParams *params) {
+    if (params->networkBridgeName == NULL) {
+        // No bridge specified, no network setup to perform
+        return 0;
+    }
+    
     ALLOC_LOCAL_FORMAT_STRING(vethNameInside, "i_%s", containerId);
     ALLOC_LOCAL_FORMAT_STRING(vethNameOutside, "o_%s", containerId);
 

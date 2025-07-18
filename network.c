@@ -57,11 +57,6 @@ static int enterNetworkNamespace(int namespaceFd) {
 }
 
 int tinyjailSetupContainerNetwork(int childPid, char* containerId, struct tinyjailContainerParams *params) {
-    if (params->networkBridgeName == NULL) {
-        // No bridge specified, no network setup to perform
-        return 0;
-    }
-    
     ALLOC_LOCAL_FORMAT_STRING(vethNameInside, "i_%s", containerId);
     ALLOC_LOCAL_FORMAT_STRING(vethNameOutside, "o_%s", containerId);
 
@@ -84,7 +79,8 @@ int tinyjailSetupContainerNetwork(int childPid, char* containerId, struct tinyja
                 && (!params->networkIpAddr || addAddressToInterface(vethNameInside, params->networkIpAddr) == 0)
                 && (!params->networkDefaultRoute || addDefaultRoute(params->networkDefaultRoute, vethNameInside) == 0)
                 && enterNetworkNamespace(myNetNsFd) == 0
-                && setMasterOfInterface(vethNameOutside, params->networkBridgeName) == 0
+                && (!params->networkPeerIpAddr || addAddressToInterface(vethNameOutside, params->networkPeerIpAddr) == 0)
+                && (!params->networkBridgeName || setMasterOfInterface(vethNameOutside, params->networkBridgeName) == 0)
                 && enableInterface(vethNameOutside) == 0
             ) {
                 // SUCCESS CASE CLEANUP
@@ -92,6 +88,8 @@ int tinyjailSetupContainerNetwork(int childPid, char* containerId, struct tinyja
                 close(myNetNsFd);
                 return 0;
             }
+            // Make sure we're in our own network namespace!
+            enterNetworkNamespace(myNetNsFd);
             // FAILURE CASE CLEANUP
             close(childPidFd);
         }

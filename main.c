@@ -43,6 +43,8 @@ int parseArgs(char** argv,
             parsedArgs->networkBridgeName = *(currentArg++);
         } else if (strcmp(command, "--ip-address") == 0) {
             parsedArgs->networkIpAddr = *(currentArg++);
+        }  else if (strcmp(command, "--peer-ip-address") == 0) {
+            parsedArgs->networkPeerIpAddr = *(currentArg++);
         } else if (strcmp(command, "--default-route") == 0) {
             parsedArgs->networkDefaultRoute = *(currentArg++);
         } else {
@@ -78,6 +80,7 @@ int main(int argc, char** argv) {
             "[--cgroup <option>=<value>] "
             "[--network-bridge <device name>] "
             "[--ip-address <address>] "
+            "[--peer-ip-address <address>] "
             "[--default-route <address>] "
             "-- <command>\n");
         return -1;

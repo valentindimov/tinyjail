@@ -21,12 +21,20 @@ int tinyjailLaunchContainer(struct tinyjailContainerParams containerParams) {
     int childPid = -1;
 
     // Validate container parameters
-    if (!containerParams.commandList 
-        || !containerParams.containerDir 
-        || !containerParams.environment
-        || (!containerParams.networkBridgeName && (containerParams.networkIpAddr || containerParams.networkDefaultRoute))
-    ) {
-        tinyjailLogError("Invalid containerParams.");
+    if (!containerParams.commandList) { 
+        tinyjailLogError("containerParams missing required parameter: commandList.");
+        return -1;
+    }
+    if (!containerParams.containerDir) { 
+        tinyjailLogError("containerParams missing required parameter: containerDir.");
+        return -1;
+    }
+    if (!containerParams.environment) { 
+        tinyjailLogError("containerParams missing required parameter: environment.");
+        return -1;
+    }
+    if (containerParams.networkBridgeName && containerParams.networkPeerIpAddr) { 
+        tinyjailLogError("containerParams cannot have both networkBridgeName and networkPeerIPAddr set.");
         return -1;
     }
 
@@ -59,12 +67,24 @@ int tinyjailLaunchContainer(struct tinyjailContainerParams containerParams) {
             .syncPipeRead = syncPipeRead,
             .syncPipeWrite = syncPipeWrite
         };
+
+        int cloneFlags = (
+            CLONE_NEWNS
+            | CLONE_NEWIPC
+            | CLONE_NEWPID
+            | CLONE_NEWUTS
+            | CLONE_NEWUSER
+            | CLONE_NEWTIME
+            | CLONE_NEWNET
+            | SIGCHLD
+        );
         // The stack memory of the child is a local 4K buffer allocated in this function. 
-        // This is fine, since the child runs in its own address space - even if we freed this region in our process, the child would be unaffected.
+        // This should be enough, but in either case, the child has its own memory map 
+        // so even if it overruns the buffer, it shouldn't cause problems for us.
         childPid = clone(
             (int (*)(void *)) containerChildLaunch, 
             (void*) (((char*) alloca(4096)) + 4095), 
-            CLONE_NEWNS | CLONE_NEWIPC | CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWUSER | CLONE_NEWTIME | CLONE_NEWNET | SIGCHLD,
+            cloneFlags,
             (void*) &args
         );
         if (childPid < 0) { 

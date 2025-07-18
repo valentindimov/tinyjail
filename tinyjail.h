@@ -8,8 +8,10 @@ struct tinyjailContainerParams {
     char** commandList;
     /// @brief envp (NULL-terminated list of KEY=VALUE strings) for the container init process
     char** environment;
+    
     /// @brief Working directory for the container init process. If set to NULL, it will be "/"
     char* workDir;
+
     /// @brief Colon-separated list of read-only directories to overlay the container FS over. Set to NULL for no overlaying.
     // TODO implement this
     char* lowerDirs; // sudo mount -t overlay overlay -olowerdir=./lower:./lower2,upperdir=./upper,workdir=./work ./upper
@@ -17,11 +19,13 @@ struct tinyjailContainerParams {
     /// @brief NULL-terminated list of "filename=value" strings that specify cgroup options like resource limits.
     char** cgroupOptions;
 
-    /// @brief If networkBridgeName is not NULL, create a vEth interface in the container and connect it to this bridge.
+    /// @brief If networkBridgeName is not NULL, set the master of the container's vEth interface to the given bridge.
     char* networkBridgeName;
-    /// @brief If networkIpAddr is not NULL, set the container's vEth interface IP address to this. Requires networkBridgeName to be specified.
+    /// @brief If networkIpAddr is not NULL, set the container's vEth interface IP address to this.
     char* networkIpAddr;
-    /// @brief If networkDefaultRoute is not NULL, set the default route of the container's vEth interface to the given destination. Requires networkBridgeName to be specified.
+    /// @brief If networkPeerIpAddr is not NULL, set IP address of the other end of the vEth pair (the one in the host namespace) to it.
+    char* networkPeerIpAddr;
+    /// @brief If networkDefaultRoute is not NULL, set the default route of the container's vEth interface to the given destination.
     char* networkDefaultRoute;
 };
 

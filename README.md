@@ -42,7 +42,7 @@ If you do not specify `--network-bridge`, your container will have no network ac
 Otherwise, `tinyjail` will create a virtual Ethernet device for your container and connect it to the specified bridge device.
 Giving your container's network device an IP address and default gateway is optional - however, if you specify either, you must also specify a bridge device.
 
-### Example Container Networking Setup
+### Example Container Networking Setup With Bridge
 The following snippet of commands will create a bridge device called `tinyjailbr`, give your host the address `10.0.100.1/24`, and set up IP forwarding and NAT for access to the Internet.
 
 ```bash
@@ -65,3 +65,15 @@ sudo ./tinyjail --network-bridge tinyjailbr --ip-address 10.0.100.2/24 --default
 ```
 
 From inside the container, you should be able to access the Internet, e.g. to ping `8.8.8.8`.
+
+### Example Container Networking Setup Without Bridge
+If you do not need to have multiple containers communicating over a bridge but just need a single container to have Internet access, you can just give the address `10.0.100.1/24` to the host end of the vEth pair instead:
+
+```bash
+# Enable IP forwarding
+sysctl net.ipv4.ip_forward=1
+# Enable SNAT from the container subnet
+iptables -t nat -A POSTROUTING -s 10.0.100.0/24 ! -d 10.0.100.0/24 -j MASQUERADE
+# Run the container
+sudo ./tinyjail --ip-address 10.0.100.2/24 --peer-ip-address 10.0.100.1/24 --default-route 10.0.100.1 --root <container root directory> -- <your command>
+```

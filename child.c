@@ -40,7 +40,7 @@ int containerChildLaunch(struct ContainerChildLauncherArgs *args) {
         return -1;
     }
     if (chdir(args->containerDir) != 0) {
-        tinyjailLogError("Child could chdir to %s: %s", args->containerDir, strerror(errno));
+        tinyjailLogError("Child could chdir to container dir %s: %s", args->containerDir, strerror(errno));
         return -1;
     }
 
@@ -52,6 +52,11 @@ int containerChildLaunch(struct ContainerChildLauncherArgs *args) {
     if (umount2(".", MNT_DETACH) != 0) {
         tinyjailLogError("Child could unmount old root after pivot_root: %s", strerror(errno));
         return -1;
+    }
+
+    // If a working directory was set, make sure to set that before execve-ing
+    if (args->workDir != NULL && chdir(args->workDir) != 0) {
+        tinyjailLogError("Child could chdir to workdir %s: %s", args->workDir, strerror(errno));
     }
 
     // All good, execute the target command.

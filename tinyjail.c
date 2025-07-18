@@ -55,6 +55,7 @@ int tinyjailLaunchContainer(struct tinyjailContainerParams containerParams) {
             .containerDir = containerParams.containerDir,
             .commandList = containerParams.commandList,
             .environment = containerParams.environment,
+            .workDir = containerParams.workDir,
             .syncPipeRead = syncPipeRead,
             .syncPipeWrite = syncPipeWrite
         };

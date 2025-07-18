@@ -29,6 +29,8 @@ int parseArgs(char** argv, struct tinyjailContainerParams *parsedArgs, char** en
             parsedArgs->containerDir = *(argparse++);
         } else if (strcmp(command, "--env") == 0) {
             *(envStringsBuffer++) = *(argparse++);
+        }  else if (strcmp(command, "--workdir") == 0) {
+            parsedArgs->workDir = *(argparse++);
         } else if (strcmp(command, "--cpu-max-percent") == 0) {
             parsedArgs->cpuMaxPercent = strtoul(*(argparse++), NULL, 0);
             if (parsedArgs->cpuMaxPercent > 100) {

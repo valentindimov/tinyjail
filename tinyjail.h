@@ -5,7 +5,7 @@ struct tinyjailContainerParams {
     char* containerDir; // Path to root directory of container
     char** commandList; // NULL-terminated argv for the container init process
     char** environment; // NULL-terminated envp for the container init process
-    // TODO working directory of the container init process
+    char* workDir; // Working directory for the container. Set to NULL to leave it unspecified.
     // TODO list of directories to overlay the root directory on top of (workdir in /tmp/...)
     // sudo mount -t overlay overlay -olowerdir=./lower:./lower2,upperdir=./upper,workdir=./work ./upper
 

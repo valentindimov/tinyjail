@@ -10,8 +10,8 @@
 #include "utils.h"
 
 int stringIsRegularFilename(const char* filename) {
-    // Disallow the special filenames "." and ".."
-    if (strcmp(filename, ".") == 0 || strcmp(filename, "..") == 0) {
+    // Disallow empty strings and the special filenames "." and ".."
+    if (*filename == '\0' || strcmp(filename, ".") == 0 || strcmp(filename, "..") == 0) {
         return 0;
     }
     // Reject any string containing slashes

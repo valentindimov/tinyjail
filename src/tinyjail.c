@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <errno.h>
 #include <sys/mount.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -24,22 +25,38 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     // Validate container parameters
     if (!containerParams.commandList) {
         result.containerStartedStatus = -1;
-        result.errorInfo = "containerParams missing required parameter: commandList.";
+        snprintf(
+            result.errorInfo,
+            ERROR_INFO_SIZE,
+            "containerParams missing required parameter: commandList."
+        );
         return result;
     }
     if (!containerParams.containerDir) {
         result.containerStartedStatus = -1;
-        result.errorInfo = "containerParams missing required parameter: containerDir.";
+        snprintf(
+            result.errorInfo,
+            ERROR_INFO_SIZE,
+            "containerParams missing required parameter: containerDir."
+        );
         return result;
     }
     if (!containerParams.environment) {
         result.containerStartedStatus = -1;
-        result.errorInfo = "containerParams missing required parameter: environment.";
+        snprintf(
+            result.errorInfo,
+            ERROR_INFO_SIZE,
+            "containerParams missing required parameter: environment."
+        );
         return result;
     }
     if (containerParams.networkBridgeName && containerParams.networkPeerIpAddr) {
         result.containerStartedStatus = -1;
-        result.errorInfo = "containerParams cannot have both networkBridgeName and networkPeerIPAddr set.";
+        snprintf(
+            result.errorInfo,
+            ERROR_INFO_SIZE,
+            "containerParams cannot have both networkBridgeName and networkPeerIPAddr set."
+        );
         return result;
     }
 
@@ -47,7 +64,13 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     struct stat containerDirStat;
     if (stat(containerParams.containerDir, &containerDirStat) != 0) {
         result.containerStartedStatus = -1;
-        result.errorInfo = "Could not stat the chosen container directory. It may be missing, or you may not have permission to stat it.";
+        snprintf(
+            result.errorInfo,
+            ERROR_INFO_SIZE,
+            "Could not stat %s: %s",
+            containerParams.containerDir,
+            strerror(errno)
+        );
         return result;
     }
     unsigned int uid = containerDirStat.st_uid;
@@ -57,7 +80,12 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     int syncPipe[2] = { -1, -1 };
     if (pipe(syncPipe) != 0) {
         result.containerStartedStatus = -1;
-        result.errorInfo = "Call to pipe() failed. Cannot set up synchronization.";
+        snprintf(
+            result.errorInfo,
+            ERROR_INFO_SIZE,
+            "pipe() failed: %s",
+            strerror(errno)
+        );
         return result;
     }
     int syncPipeWrite = syncPipe[1];
@@ -96,9 +124,14 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
         );
         close(syncPipeRead);
         if (childPid < 0) { 
-            close(syncPipeWrite);
             result.containerStartedStatus = -1;
-            result.errorInfo = "Could not launch container: clone() failed.";
+            snprintf(
+                result.errorInfo,
+                ERROR_INFO_SIZE,
+                "clone() failed: %s",
+                strerror(errno)
+            );
+            close(syncPipeWrite);
             return result;
         }
     }

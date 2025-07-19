@@ -29,13 +29,15 @@ struct tinyjailContainerParams {
     char* networkDefaultRoute;
 };
 
+// Try to keep this struct at 256 B
+#define ERROR_INFO_SIZE (240)
 struct tinyjailContainerResult {
     /// @brief Set to 0 if the container was started successfully, and nonzero otherwise
     int containerStartedStatus;
     /// @brief If the container started successfully, this stores its exit status (as written by waitpid()).
     int containerExitStatus;
-    /// @brief Static string with a more detailed error description, if available. Do not free this.
-    char* errorInfo;
+    /// @brief Shost human-readable string with a more detailed error description, if available.
+    char errorInfo[ERROR_INFO_SIZE];
 };
 
 __attribute__ ((visibility ("default"))) struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerParams programArgs);

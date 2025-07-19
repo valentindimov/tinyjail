@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <sched.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/syscall.h>
 
 #include "utils.h"
@@ -46,7 +47,12 @@ static int addDefaultRoute(char* targetAddress, char* targetInterface) {
 
 static int enterNetworkNamespace(int namespaceFd, struct tinyjailContainerResult *result) {
     if (setns(namespaceFd, CLONE_NEWNET) != 0) {
-        result->errorInfo = "Could not switch network namespace (setns() failed).";
+        snprintf(
+            result->errorInfo,
+            ERROR_INFO_SIZE,
+            "setns() for network namespace failed: %s",
+            strerror(errno)
+        );
         return -1;
     }
     return 0;
@@ -64,11 +70,21 @@ int tinyjailSetupContainerNetwork(
     // Create a veth pair for the container
     int myNetNsFd = open("/proc/self/ns/net", O_RDONLY);
     if (myNetNsFd < 0) {
-        result->errorInfo = "Failed to get FD of my own network namespace. Is /proc mounted?";
+        snprintf(
+            result->errorInfo,
+            ERROR_INFO_SIZE,
+            "Could not open /proc/self/ns/net: %s",
+            strerror(errno)
+        );
     } else {
         int childPidFd = syscall(SYS_pidfd_open, childPid, 0);
         if (myNetNsFd < 0) {
-            result->errorInfo = "Could not get a handle on child process (pidfd_open() failed).";
+            snprintf(
+                result->errorInfo,
+                ERROR_INFO_SIZE,
+                "pidfd_open() on child PID failed: %s",
+                strerror(errno)
+            );
         } else {
             // Create the vEth pair -inside- the container, then move it outside of it by using the parent PID as the namespace PID.
             // This saves us from having to delete the interface to clean up - when the container dies, the interface is automatically cleaned up.

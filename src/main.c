@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
         fprintf(
             stderr, 
             "Error when starting container: %s\n", 
-            result.errorInfo == NULL ? "(no error info)" : result.errorInfo
+            result.errorInfo[0] == '\0' ? "(no error info)" : result.errorInfo
         );
         return -1;
     } else if (WIFEXITED(result.containerExitStatus)) {

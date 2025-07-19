@@ -3,8 +3,9 @@
 #include <string.h>
 #include <stdio.h>
 #include <alloca.h>
-#include <sys/stat.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <sys/stat.h>
 
 #include "utils.h"
 #include "cgroup.h"
@@ -19,19 +20,39 @@ static int configureCgroup(
 ) {
     // Set up delegation
     if (fchownat(cgroupPathFd, ".", uid, gid, 0) != 0) {
-        result->errorInfo = "Failed to change the owner of the container cgroup";
+        snprintf(
+            result->errorInfo,
+            ERROR_INFO_SIZE,
+            "Could not delegate container cgroup: %s",
+            strerror(errno)
+        );
         return -1; 
     }
-    if (fchownat(cgroupPathFd, "cgroup.procs", uid, gid, 0) != 0) { 
-        result->errorInfo = "Failed to change the owner of the container cgroup.procs";
+    if (fchownat(cgroupPathFd, "cgroup.procs", uid, gid, 0) != 0) {
+        snprintf(
+            result->errorInfo,
+            ERROR_INFO_SIZE,
+            "Could not delegate container cgroup.procs: %s",
+            strerror(errno)
+        );
         return -1; 
     }
     if (fchownat(cgroupPathFd, "cgroup.subtree_control", uid, gid, 0) != 0) {
-        result->errorInfo = "Failed to change the owner of the container cgroup.subtree_control";
+        snprintf(
+            result->errorInfo,
+            ERROR_INFO_SIZE,
+            "Could not delegate container cgroup.subtree_control: %s",
+            strerror(errno)
+        );
         return -1; 
     }
     if (fchownat(cgroupPathFd, "cgroup.threads", uid, gid, 0) != 0) {
-        result->errorInfo = "Failed to change the owner of the container cgroup.threads";
+        snprintf(
+            result->errorInfo,
+            ERROR_INFO_SIZE,
+            "Could not delegate container cgroup.threads: %s",
+            strerror(errno)
+        );
         return -1; 
     }
 
@@ -57,23 +78,44 @@ static int configureCgroup(
             contents++;
             if (!stringIsRegularFilename(filename)) {
                 // Make sure we only try writing to files in the cgroup directory
-                result->errorInfo = "You specified an invalid cgroups option name.";
+                snprintf(
+                    result->errorInfo,
+                    ERROR_INFO_SIZE,
+                    "Invalid cgroup option name: %s",
+                    filename
+                );
                 return -1;
             }
             if (tinyjailWriteFileAt(cgroupPathFd, filename, "%s", contents) != 0) {
-                result->errorInfo = "Could not apply one of the cgroups options. Make sure that the option exists and belongs to a controller which is enabled in /sys/fs/cgroup/cgroup.subtree_control";
+                snprintf(
+                    result->errorInfo,
+                    ERROR_INFO_SIZE,
+                    "Failed to apply cgroup option %s: %s",
+                    filename,
+                    strerror(errno)
+                );
                 return -1;
             }
         } else {
             // We did not find an '=' sign, the string was malformed
-            result->errorInfo = "You specified a cgroups option without a value.";
+            snprintf(
+                result->errorInfo,
+                ERROR_INFO_SIZE,
+                "Cgroup option %s is missing a value (missing '=')",
+                filename
+            );
             return 1;
         }
     }
 
     // Move the child process to the cgroup
-    if (tinyjailWriteFileAt(cgroupPathFd, "cgroup.procs", "%d", childPid) != 0) { 
-        result->errorInfo = "Could not move the container process to the container cgroup.";
+    if (tinyjailWriteFileAt(cgroupPathFd, "cgroup.procs", "%d", childPid) != 0) {
+        snprintf(
+            result->errorInfo,
+            ERROR_INFO_SIZE,
+            "Could not move container process to cgroup: %s",
+            strerror(errno)
+        );
         return -1; 
     }
 
@@ -90,11 +132,22 @@ int tinyjailSetupContainerCgroup(
 ) {
     ALLOC_LOCAL_FORMAT_STRING(containerCgroupPath, "/sys/fs/cgroup/container_%s", containerId);
     if (mkdir(containerCgroupPath, 0770) != 0) {
-        result->errorInfo = "Could not create cgroup for the container. Make sure /sys/fs/cgroup is mounted.";
+        snprintf(
+            result->errorInfo,
+            ERROR_INFO_SIZE,
+            "Could not create cgroup: %s. Make sure /sys/fs/cgroup is mounted.",
+            strerror(errno)
+        );
     } else {
         int cgroupPathFd = open(containerCgroupPath, 0);
         if (cgroupPathFd < 0) {
-            result->errorInfo = "Created a cgroup, but could not open it. You might not have permission for it";
+            snprintf(
+                result->errorInfo,
+                ERROR_INFO_SIZE,
+                "Could not open cgroup container_%s: %s.",
+                containerId,
+                strerror(errno)
+            );
         } else {
             if (configureCgroup(cgroupPathFd, childPid, uid, gid, containerParams, result) == 0) {
                 // SUCCESS CASE CLEANUP

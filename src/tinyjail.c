@@ -88,11 +88,28 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
         );
         return result;
     }
+    int syncPipeRead = syncPipe[0];
     int syncPipeWrite = syncPipe[1];
+
+    // Set up a second pair of pipes for the child process to send error messages back to the parent
+    int errorPipe[2] = { -1, -1 };
+    if (pipe(errorPipe) != 0) {
+        result.containerStartedStatus = -1;
+        snprintf(
+            result.errorInfo,
+            ERROR_INFO_SIZE,
+            "pipe() failed: %s",
+            strerror(errno)
+        );
+        close(syncPipe[0]);
+        close(syncPipe[1]);
+        return result;
+    }
+    int errorPipeRead = errorPipe[0];
+    int errorPipeWrite = errorPipe[1];
 
     // Start the child process and close the read end of the sync pipe (it is for the child process only)
     {
-        int syncPipeRead = syncPipe[0];
         // Do not unshare the cgroup namespace just yet - the subprocess will do this, after we have moved it to the right cgroup. 
         struct ContainerChildLauncherArgs args = {
             .containerDir = containerParams.containerDir,
@@ -100,7 +117,9 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
             .environment = containerParams.environment,
             .workDir = containerParams.workDir,
             .syncPipeRead = syncPipeRead,
-            .syncPipeWrite = syncPipeWrite
+            .syncPipeWrite = syncPipeWrite,
+            .errorPipeRead = errorPipeRead,
+            .errorPipeWrite = errorPipeWrite
         };
 
         int cloneFlags = (
@@ -122,16 +141,19 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
             cloneFlags,
             (void*) &args
         );
+        int cloneErrno = errno;
         close(syncPipeRead);
+        close(errorPipeWrite);
         if (childPid < 0) { 
             result.containerStartedStatus = -1;
             snprintf(
                 result.errorInfo,
                 ERROR_INFO_SIZE,
                 "clone() failed: %s",
-                strerror(errno)
+                strerror(cloneErrno)
             );
             close(syncPipeWrite);
+            close(errorPipeRead);
             return result;
         }
     }
@@ -147,10 +169,12 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
         || tinyjailSetupContainerUserNamespace(childPid, uid, gid, &result) != 0
         || tinyjailSetupContainerNetwork(childPid, containerId, &containerParams, &result) != 0
         || write(syncPipeWrite, "OK", 2) != 2 // TODO: logError("Could not give the child the go-ahead signal: %s", strerror(errno))
+        || (read(errorPipeRead, result.errorInfo, ERROR_INFO_SIZE - 1) > 0)
         || waitpid(childPid, &(result.containerExitStatus), __WALL) < 0 // TODO: logError("waitpid() failed: %s", strerror(errno)); 
     ) {
         kill(childPid, SIGKILL);
         close(syncPipeWrite);
+        close(errorPipeRead);
         tinyjailDestroyCgroup(containerId);
         // The subroutines should have set an error message already
         result.containerStartedStatus = -1;
@@ -160,6 +184,7 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     int tmp;
     while (wait(&tmp) > 0) {}
     close(syncPipeWrite);
+    close(errorPipeRead);
     tinyjailDestroyCgroup(containerId);
 
     return result;

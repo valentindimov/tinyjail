@@ -16,6 +16,7 @@ int containerChildLaunch(struct ContainerChildLauncherArgs *args) {
     // We won't need the writing end of the sync pipe (and in case the parent crashes, we want to avoid being stuck waiting on ourselves)
     close(args->syncPipeWrite);
     close(args->errorPipeRead);
+    
     // Wait to get a message "OK" over the sync pipe. Only if we get that are we sure that our parent has initialized everything.
     char result[2];
     if (read(args->syncPipeRead, result, 2) != 2 || strncmp(result, "OK", 2) != 0) {

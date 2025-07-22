@@ -78,7 +78,7 @@ int tinyjailSetupContainerNetwork(
         );
     } else {
         int childPidFd = syscall(SYS_pidfd_open, childPid, 0);
-        if (myNetNsFd < 0) {
+        if (childPidFd < 0) {
             snprintf(
                 result->errorInfo,
                 ERROR_INFO_SIZE,

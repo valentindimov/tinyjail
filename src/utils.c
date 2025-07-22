@@ -9,6 +9,12 @@
 #include "tinyjail.h"
 #include "utils.h"
 
+void closep(int* fd) {
+    if (*fd >= 0) {
+        close(*fd);
+    }
+}
+
 int stringIsRegularFilename(const char* filename) {
     // Disallow empty strings and the special filenames "." and ".."
     if (*filename == '\0' || strcmp(filename, ".") == 0 || strcmp(filename, "..") == 0) {

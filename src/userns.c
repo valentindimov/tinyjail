@@ -14,7 +14,7 @@ int tinyjailSetupContainerUserNamespace(
 ) {
     ALLOC_LOCAL_FORMAT_STRING(procfsProcPath, "/proc/%d", childPid);
 
-    int procFd = open(procfsProcPath, 0);
+    RAII_FD procFd = open(procfsProcPath, 0);
     if (procFd < 0) {
         snprintf(
             result->errorInfo, 
@@ -31,7 +31,6 @@ int tinyjailSetupContainerUserNamespace(
             "Could not set uid_map for child process: %s",
             strerror(errno)
         );
-        close(procFd);
         return -1;
     }
     if (tinyjailWriteFileAt(procFd, "setgroups", "deny") != 0) {
@@ -41,7 +40,6 @@ int tinyjailSetupContainerUserNamespace(
             "Could not set setgroups deny for child process: %s",
             strerror(errno)
         );
-        close(procFd);
         return -1;
     }
     if (tinyjailWriteFileAt(procFd, "gid_map", "0 %u 1\n", gid) != 0) {
@@ -51,9 +49,7 @@ int tinyjailSetupContainerUserNamespace(
             "Could not set gid_map for child process: %s",
             strerror(errno)
         );
-        close(procFd);
         return -1;
     }
-    close(procFd);
     return 0;
 }

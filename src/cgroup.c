@@ -10,14 +10,19 @@
 #include "utils.h"
 #include "cgroup.h"
 
-static int configureCgroup(
-    int cgroupPathFd,
+int tinyjailSetupContainerCgroup(
+    const char* containerCgroupPath,
     int childPid,
     unsigned int uid, 
     unsigned int gid, 
     const struct tinyjailContainerParams* containerParams,
     struct tinyjailContainerResult *result
 ) {
+    RAII_FD cgroupPathFd = open(containerCgroupPath, 0);
+    if (cgroupPathFd < 0) {
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not open cgroup %s: %s.", containerCgroupPath, strerror(errno));
+        return -1;
+    }
     // Set up delegation
     if (fchownat(cgroupPathFd, ".", uid, gid, 0) != 0) {
         snprintf(
@@ -120,52 +125,4 @@ static int configureCgroup(
     }
 
     return 0;
-}
-
-int tinyjailSetupContainerCgroup(
-    char* containerId, 
-    int childPid, 
-    unsigned int uid, 
-    unsigned int gid, 
-    struct tinyjailContainerParams* containerParams,
-    struct tinyjailContainerResult* result
-) {
-    ALLOC_LOCAL_FORMAT_STRING(containerCgroupPath, "/sys/fs/cgroup/container_%s", containerId);
-    if (mkdir(containerCgroupPath, 0770) != 0) {
-        snprintf(
-            result->errorInfo,
-            ERROR_INFO_SIZE,
-            "Could not create cgroup: %s. Make sure /sys/fs/cgroup is mounted.",
-            strerror(errno)
-        );
-    } else {
-        int cgroupPathFd = open(containerCgroupPath, 0);
-        if (cgroupPathFd < 0) {
-            snprintf(
-                result->errorInfo,
-                ERROR_INFO_SIZE,
-                "Could not open cgroup container_%s: %s.",
-                containerId,
-                strerror(errno)
-            );
-        } else {
-            if (configureCgroup(cgroupPathFd, childPid, uid, gid, containerParams, result) == 0) {
-                // SUCCESS CASE CLEANUP
-                close(cgroupPathFd);
-                return 0;
-            }
-            // FAILURE CASE CLEANUP
-            close(cgroupPathFd);
-        }
-        rmdir(containerCgroupPath);
-    }
-    return -1;
-}
-
-int tinyjailDestroyCgroup(char* containerId) {
-    ALLOC_LOCAL_FORMAT_STRING(containerCgroupPath, "/sys/fs/cgroup/container_%s", containerId);
-    if (rmdir(containerCgroupPath) == 0) { 
-        return 0;
-    }
-    return 1;
 }

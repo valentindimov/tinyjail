@@ -17,6 +17,14 @@
 #include "userns.h"
 #include "child.h"
 
+static void rmdirp(char **dir) {
+    if (*dir != NULL) {
+        rmdir(*dir);
+    }
+}
+
+#define RAII_DIR __attribute__((cleanup(rmdirp))) char*
+
 struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerParams containerParams) {
     struct tinyjailContainerResult result = {0};
     
@@ -69,13 +77,7 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     struct stat containerDirStat;
     if (stat(containerParams.containerDir, &containerDirStat) != 0) {
         result.containerStartedStatus = -1;
-        snprintf(
-            result.errorInfo,
-            ERROR_INFO_SIZE,
-            "Could not stat %s: %s",
-            containerParams.containerDir,
-            strerror(errno)
-        );
+        snprintf(result.errorInfo, ERROR_INFO_SIZE, "Could not stat %s: %s", containerParams.containerDir, strerror(errno));
         return result;
     }
     unsigned int uid = containerDirStat.st_uid;
@@ -85,17 +87,21 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     int syncPipe[2] = { -1, -1 };
     int errorPipe[2] = { -1, -1 };
     int pipeSuccess = (pipe(syncPipe) == 0 && pipe(errorPipe) == 0);
-    int syncPipeRead = syncPipe[0];
-    int syncPipeWrite = syncPipe[1];
-    int errorPipeRead = errorPipe[0];
-    int errorPipeWrite = errorPipe[1];
+    RAII_FD syncPipeRead = syncPipe[0];
+    RAII_FD syncPipeWrite = syncPipe[1];
+    RAII_FD errorPipeRead = errorPipe[0];
+    RAII_FD errorPipeWrite = errorPipe[1];
     if (!pipeSuccess) {
         result.containerStartedStatus = -1;
         snprintf(result.errorInfo, ERROR_INFO_SIZE, "pipe() failed: %s", strerror(errno));
-        if (syncPipeRead < 0) { close(syncPipeRead); }
-        if (syncPipeWrite < 0) { close(syncPipeWrite); }
-        if (errorPipeRead < 0) { close(errorPipeRead); }
-        if (errorPipeWrite < 0) { close(errorPipeWrite); }
+        return result;
+    }
+
+    // Create a cgroup for the child process (it will be deleted when the variable goes out of scope)
+    ALLOC_LOCAL_FORMAT_STRING(_containerCgroupPath, "/sys/fs/cgroup/container_%s", containerId);
+    RAII_DIR containerCgroupPath = _containerCgroupPath;
+    if (mkdir(containerCgroupPath, 0770) != 0) {
+        snprintf(result.errorInfo, ERROR_INFO_SIZE, "Could not create cgroup: %s. Make sure /sys/fs/cgroup is mounted.", strerror(errno));
         return result;
     }
 
@@ -130,25 +136,18 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
         cloneFlags,
         (void*) &args
     );
-    if (childPid < 0) { 
+    if (childPid < 0) {
         result.containerStartedStatus = -1;
-        snprintf(
-            result.errorInfo,
-            ERROR_INFO_SIZE,
-            "clone() failed: %s",
-            strerror(errno)
-        );
-        close(syncPipeRead);
-        close(syncPipeWrite);
-        close(errorPipeRead);
-        close(errorPipeWrite);
+        snprintf(result.errorInfo, ERROR_INFO_SIZE, "clone() failed: %s", strerror(errno));
         return result;
     }
     close(syncPipeRead);
+    syncPipeRead = -1; // Make sure to set this to -1 to avoid closing it again when it exits scope
     close(errorPipeWrite);
+    errorPipeWrite = -1; // Make sure to set this to -1 to avoid closing it again when it exits scope
 
     if (
-        tinyjailSetupContainerCgroup(containerId, childPid, uid, gid, &containerParams, &result) != 0
+        tinyjailSetupContainerCgroup(containerCgroupPath, childPid, uid, gid, &containerParams, &result) != 0
         || tinyjailSetupContainerUserNamespace(childPid, uid, gid, &result) != 0
         || tinyjailSetupContainerNetwork(childPid, containerId, &containerParams, &result) != 0
         || write(syncPipeWrite, "OK", 2) != 2 // TODO: logError("Could not give the child the go-ahead signal: %s", strerror(errno))
@@ -156,19 +155,12 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
         || waitpid(childPid, &(result.containerExitStatus), __WALL) < 0 // TODO: logError("waitpid() failed: %s", strerror(errno)); 
     ) {
         kill(childPid, SIGKILL);
-        close(syncPipeWrite);
-        close(errorPipeRead);
-        tinyjailDestroyCgroup(containerId);
         // The subroutines should have set an error message already
         result.containerStartedStatus = -1;
-        return result;
     }
     // As we clean up, make sure to vacuum up any leftover child processes
     int tmp;
     while (wait(&tmp) > 0) {}
-    close(syncPipeWrite);
-    close(errorPipeRead);
-    tinyjailDestroyCgroup(containerId);
 
     return result;
 }

@@ -12,7 +12,7 @@ A special thanks goes to [TNG Technology Consuling GmbH](https://www.tngtech.com
 The build script [build.sh](./build.sh) will build the utility, both as a statically-linked binary and a dynamic library you can link into your own projects. 
 
 You will need to install musl (on Linux: `sudo apt-get update -y && sudo apt-get install -y musl-dev musl-tools`) to run the build script. 
-The binary should also build just fine with regular `gcc` - however, static linking is discouraged with glibc.
+The binary should also build just fine with regular `gcc` or `clang` - however, static linking is discouraged with glibc.
 
 ## Library interface
 The source code for the library is in [tinyjail.c](./tinyjail.c), the interface in [tinyjail.h](./tinyjail.h).

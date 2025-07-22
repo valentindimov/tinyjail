@@ -47,12 +47,7 @@ static int addDefaultRoute(char* targetAddress, char* targetInterface) {
 
 static int enterNetworkNamespace(int namespaceFd, struct tinyjailContainerResult *result) {
     if (setns(namespaceFd, CLONE_NEWNET) != 0) {
-        snprintf(
-            result->errorInfo,
-            ERROR_INFO_SIZE,
-            "setns() for network namespace failed: %s",
-            strerror(errno)
-        );
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "setns() for network namespace failed: %s", strerror(errno));
         return -1;
     }
     return 0;
@@ -68,7 +63,7 @@ int tinyjailSetupContainerNetwork(
     ALLOC_LOCAL_FORMAT_STRING(vethNameOutside, "o_%s", containerId);
 
     // Create a veth pair for the container
-    int myNetNsFd = open("/proc/self/ns/net", O_RDONLY);
+    RAII_FD myNetNsFd = open("/proc/self/ns/net", O_RDONLY);
     if (myNetNsFd < 0) {
         snprintf(
             result->errorInfo,
@@ -77,7 +72,7 @@ int tinyjailSetupContainerNetwork(
             strerror(errno)
         );
     } else {
-        int childPidFd = syscall(SYS_pidfd_open, childPid, 0);
+        RAII_FD childPidFd = syscall(SYS_pidfd_open, childPid, 0);
         if (childPidFd < 0) {
             snprintf(
                 result->errorInfo,
@@ -101,16 +96,11 @@ int tinyjailSetupContainerNetwork(
                 && enableInterface(vethNameOutside) == 0
             ) {
                 // SUCCESS CASE CLEANUP
-                close(childPidFd);
-                close(myNetNsFd);
                 return 0;
             }
-            // Make sure we're in our own network namespace!
+            // Make sure we're in our own network namespace even if we failed!
             setns(myNetNsFd, CLONE_NEWNET);
-            // FAILURE CASE CLEANUP
-            close(childPidFd);
         }
-        close(myNetNsFd);
     }
     return -1;
 }

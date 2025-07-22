@@ -4,6 +4,7 @@
 #include <sched.h>
 #include <unistd.h>
 #include <string.h>
+#include <fcntl.h>
 #include <sys/mount.h>
 #include <sys/syscall.h> 
 #include <sys/stat.h>
@@ -69,10 +70,18 @@ int containerChildLaunch(struct ContainerChildLauncherArgs *args) {
         return -1;
     }
 
+    // Make sure that if we successfully execve(), the errorPipeWrite is closed
+    if (fcntl(args->errorPipeWrite, F_SETFD, FD_CLOEXEC) < 0) {
+        ALLOC_LOCAL_FORMAT_STRING(error, "fcntl() on error pipe failed: %s", strerror(errno))
+        write(args->errorPipeWrite, error, strlen(error));
+        return -1;
+    }
+
     // All good, execute the target command.
-    close(args->errorPipeWrite);
     execve(args->commandList[0], (args->commandList + 1), args->environment);
 
-    // If we got here, the execve() call failed. We already cleaned the temporary directory though, so just exit.
-    return errno;
+    // If we got here, the execve() call failed.
+    ALLOC_LOCAL_FORMAT_STRING(error, "execve() failed: %s", strerror(errno))
+    write(args->errorPipeWrite, error, strlen(error));
+    return -1;
 }

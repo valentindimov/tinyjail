@@ -4,7 +4,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <alloca.h>
 
@@ -58,11 +57,6 @@ int parseArgs(char** argv,
 }
 
 int main(int argc, char** argv) {
-    if (getuid() != 0) { 
-        printf("Please run this program as root.\n"); 
-        return -1;
-    }
-
     // We can have at most argc env pointers specified, so just allocate space for that many.
     // We will definitely allocate too much space here, but it's just 8 B per pointer...
     char** envStringsBuf = alloca((argc + 1) * sizeof(char*));

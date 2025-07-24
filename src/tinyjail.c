@@ -6,7 +6,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sched.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -413,8 +412,12 @@ static int finishConfiguringAndAwaitContainerProcess(
 
 struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerParams containerParams) {
     struct tinyjailContainerResult result = {0};
-    
-    int childPid = -1;
+
+    if (getuid() != 0) {
+        result.containerStartedStatus = -1;
+        snprintf(result.errorInfo, ERROR_INFO_SIZE, "tinyjail requires root permissions to run.");
+        return result;
+    }
 
     // Validate container parameters
     if (!containerParams.commandList) {
@@ -492,7 +495,7 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     // The stack memory of the child is a local 4K buffer allocated in this function. 
     // This should be enough, but in either case, the child has its own memory map 
     // so even if it overruns the buffer, it shouldn't cause problems for us.
-    childPid = clone(
+    int childPid = clone(
         (int (*)(void *)) containerChildLaunch, 
         (void*) (((char*) alloca(4096)) + 4095), 
         cloneFlags,

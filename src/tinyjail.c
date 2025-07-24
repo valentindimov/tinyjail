@@ -172,34 +172,38 @@ static int configureContainerUserNamespace(
     return 0;
 }
 
-// TODO: Challenge accepted (and postponed until I have time to learn how to use rtnetlink), do all of this without invoking the iproute2 tool
-
 static int createVethPair(char* if1, char* if2) {
+    // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
     ALLOC_LOCAL_FORMAT_STRING(command, "ip link add dev %s type veth peer %s", if1, if2);
     return system(command);
 }
 
 static int setMasterOfInterface(char* interface, char* master) {
+    // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
     ALLOC_LOCAL_FORMAT_STRING(command, "ip link set %s master %s", interface, master);
     return system(command);
 }
 
 static int enableInterface(char* interface) {
+    // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
     ALLOC_LOCAL_FORMAT_STRING(command, "ip link set %s up", interface);
     return system(command);
 }
 
 static int moveInterfaceToNamespaceByFd(char* interface, int fd) {
+    // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
     ALLOC_LOCAL_FORMAT_STRING(command, "ip link set %s netns /proc/self/fd/%d", interface, fd);
     return system(command);
 }
 
 static int addAddressToInterface(char* interface, char* address) {
+    // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
     ALLOC_LOCAL_FORMAT_STRING(command, "ip addr add %s dev %s", address, interface);
     return system(command);
 }
 
 static int addDefaultRouteToInterface(char* targetAddress, char* targetInterface) {
+    // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
     ALLOC_LOCAL_FORMAT_STRING(command, "ip route add default via %s dev %s", targetAddress, targetInterface);
     return system(command);
 }

@@ -198,7 +198,7 @@ static int addAddressToInterface(char* interface, char* address) {
     return system(command);
 }
 
-static int addDefaultRoute(char* targetAddress, char* targetInterface) {
+static int addDefaultRouteToInterface(char* targetAddress, char* targetInterface) {
     ALLOC_LOCAL_FORMAT_STRING(command, "ip route add default via %s dev %s", targetAddress, targetInterface);
     return system(command);
 }
@@ -238,7 +238,7 @@ static int configureNetwork(
         }
     }
     if (params->networkDefaultRoute) {
-        if (addDefaultRoute(params->networkDefaultRoute, vethNameInside) != 0) {
+        if (addDefaultRouteToInterface(params->networkDefaultRoute, vethNameInside) != 0) {
             snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not add default route %s to inside interace %s.", params->networkDefaultRoute, vethNameInside);
             return -1;
         }

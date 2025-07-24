@@ -10,13 +10,11 @@ A special thanks goes to [TNG Technology Consuling GmbH](https://www.tngtech.com
 
 ## Building
 The build script [build.sh](./build.sh) will build the utility, both as a statically-linked binary and a dynamic library you can link into your own projects. 
+If you prefer, you can also directly use the [tinyjail.c](src/tinyjail.c) and [tinyjail.h](src/tinyjail.h) files as part of your source code.
+[main.c](src/main.c) is just the command-line frontend of the binary.
 
 You will need to install musl (on Linux: `sudo apt-get update -y && sudo apt-get install -y musl-dev musl-tools`) to run the build script. 
 The binary should also build just fine with regular `gcc` or `clang` - however, static linking is discouraged with glibc.
-
-## Library interface
-The source code for the library is in [tinyjail.c](./tinyjail.c), the interface in [tinyjail.h](./tinyjail.h).
-Link with the library `build/libtinyjail.so` produced by the build script.
 
 ## Binary usage
 The static binary `build/tinyjail` produced by the build script (whose main function is in [main.c](./main.c)) can be used to start containers as well. 

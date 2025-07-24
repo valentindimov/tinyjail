@@ -416,45 +416,33 @@ static int finishConfiguringAndAwaitContainerProcess(
 struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerParams containerParams) {
     struct tinyjailContainerResult result = {0};
 
+#define RETURN_WITH_ERROR(...) result.containerStartedStatus = -1; snprintf(result.errorInfo, ERROR_INFO_SIZE, __VA_ARGS__); return result;
+
     if (getuid() != 0) {
-        result.containerStartedStatus = -1;
-        snprintf(result.errorInfo, ERROR_INFO_SIZE, "tinyjail requires root permissions to run.");
-        return result;
+        RETURN_WITH_ERROR("tinyjail requires root permissions to run.");
     }
 
     // Validate container parameters
     if (!containerParams.commandList) {
-        result.containerStartedStatus = -1;
-        snprintf(result.errorInfo, ERROR_INFO_SIZE, "containerParams missing required parameter: commandList.");
-        return result;
+        RETURN_WITH_ERROR("containerParams missing required parameter: commandList.");
     }
     if (!containerParams.containerDir) {
-        result.containerStartedStatus = -1;
-        snprintf(result.errorInfo, ERROR_INFO_SIZE, "containerParams missing required parameter: containerDir.");
-        return result;
+        RETURN_WITH_ERROR("containerParams missing required parameter: containerDir.");
     }
     if (!containerParams.environment) {
-        result.containerStartedStatus = -1;
-        snprintf(result.errorInfo, ERROR_INFO_SIZE, "containerParams missing required parameter: environment.");
-        return result;
+        RETURN_WITH_ERROR("containerParams missing required parameter: environment.");
     }
     if (containerParams.networkBridgeName && containerParams.networkPeerIpAddr) {
-        result.containerStartedStatus = -1;
-        snprintf(result.errorInfo, ERROR_INFO_SIZE, "containerParams cannot have both networkBridgeName and networkPeerIPAddr set.");
-        return result;
+        RETURN_WITH_ERROR("containerParams cannot have both networkBridgeName and networkPeerIPAddr set.");
     }
     char resolvedRootPath[(PATH_MAX + 1) * sizeof(char)];
     memset(resolvedRootPath, 0, sizeof(resolvedRootPath));
     if (realpath(containerParams.containerDir, resolvedRootPath) == NULL) {
-        result.containerStartedStatus = -1;
-        snprintf(result.errorInfo, ERROR_INFO_SIZE, "Could not resolve path %s: %s", containerParams.containerDir, strerror(errno));
-        return result;
+        RETURN_WITH_ERROR("Could not resolve path %s: %s", containerParams.containerDir, strerror(errno));
     }
     containerParams.containerDir = resolvedRootPath;
     if (strcmp(containerParams.containerDir, "/") == 0) {
-        result.containerStartedStatus = -1;
-        snprintf(result.errorInfo, ERROR_INFO_SIZE, "Container root dir cannot be /");
-        return result;
+        RETURN_WITH_ERROR("Container root dir cannot be /");
     }
 
     // Limit the container ID to 12 characters since it's used to generate names for the network interfaces (which are capped at 15 characters)
@@ -465,9 +453,7 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     // Determine the UID and GID for the container as the owner of the container directory
     struct stat containerDirStat;
     if (stat(containerParams.containerDir, &containerDirStat) != 0) {
-        result.containerStartedStatus = -1;
-        snprintf(result.errorInfo, ERROR_INFO_SIZE, "Could not stat %s: %s", containerParams.containerDir, strerror(errno));
-        return result;
+        RETURN_WITH_ERROR("Could not stat %s: %s", containerParams.containerDir, strerror(errno));
     }
     unsigned int uid = containerDirStat.st_uid;
     unsigned int gid = containerDirStat.st_gid;
@@ -481,9 +467,7 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     RAII_FD errorPipeRead = errorPipe[0];
     RAII_FD errorPipeWrite = errorPipe[1];
     if (!pipeSuccess) {
-        result.containerStartedStatus = -1;
-        snprintf(result.errorInfo, ERROR_INFO_SIZE, "pipe() failed: %s", strerror(errno));
-        return result;
+        RETURN_WITH_ERROR("pipe() failed: %s", strerror(errno));
     }
 
     // Start the child process and close the read end of the sync pipe (it is for the child process only)
@@ -518,8 +502,7 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
         (void*) &args
     );
     if (childPid < 0) {
-        result.containerStartedStatus = -1;
-        snprintf(result.errorInfo, ERROR_INFO_SIZE, "clone() failed: %s", strerror(errno));
+        RETURN_WITH_ERROR("clone() failed: %s", strerror(errno));
         return result;
     }
     closep(&syncPipeRead); // closep() is idempotent because it also sets the FD variable to -1
@@ -556,4 +539,6 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     rmdir(containerCgroupPath);
 
     return result;
+
+#undef RETURN_WITH_ERROR
 }

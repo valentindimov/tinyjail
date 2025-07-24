@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
     }
 
     // We can have at most argc env pointers specified, so just allocate space for that many.
-    // We will definitely allocate too much space here, but it shouldn't really be a problem.
+    // We will definitely allocate too much space here, but it's just 8 B per pointer...
     char** envStringsBuf = alloca((argc + 1) * sizeof(char*));
     memset(envStringsBuf, 0, (argc + 1) * sizeof(char*));
 

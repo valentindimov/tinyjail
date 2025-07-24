@@ -25,39 +25,19 @@ int tinyjailSetupContainerCgroup(
     }
     // Set up delegation
     if (fchownat(cgroupPathFd, ".", uid, gid, 0) != 0) {
-        snprintf(
-            result->errorInfo,
-            ERROR_INFO_SIZE,
-            "Could not delegate container cgroup: %s",
-            strerror(errno)
-        );
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not delegate container cgroup: %s", strerror(errno));
         return -1; 
     }
     if (fchownat(cgroupPathFd, "cgroup.procs", uid, gid, 0) != 0) {
-        snprintf(
-            result->errorInfo,
-            ERROR_INFO_SIZE,
-            "Could not delegate container cgroup.procs: %s",
-            strerror(errno)
-        );
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not delegate container cgroup.procs: %s", strerror(errno));
         return -1; 
     }
     if (fchownat(cgroupPathFd, "cgroup.subtree_control", uid, gid, 0) != 0) {
-        snprintf(
-            result->errorInfo,
-            ERROR_INFO_SIZE,
-            "Could not delegate container cgroup.subtree_control: %s",
-            strerror(errno)
-        );
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not delegate container cgroup.subtree_control: %s", strerror(errno));
         return -1; 
     }
     if (fchownat(cgroupPathFd, "cgroup.threads", uid, gid, 0) != 0) {
-        snprintf(
-            result->errorInfo,
-            ERROR_INFO_SIZE,
-            "Could not delegate container cgroup.threads: %s",
-            strerror(errno)
-        );
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not delegate container cgroup.threads: %s", strerror(errno));
         return -1; 
     }
 
@@ -81,14 +61,9 @@ int tinyjailSetupContainerCgroup(
             // Found '=', replace it with a NULL and use the remainder of the string as contents.
             *contents = '\0';
             contents++;
+            // Make sure we only try writing to files in the cgroup directory
             if (!stringIsRegularFilename(filename)) {
-                // Make sure we only try writing to files in the cgroup directory
-                snprintf(
-                    result->errorInfo,
-                    ERROR_INFO_SIZE,
-                    "Invalid cgroup option name: %s",
-                    filename
-                );
+                snprintf(result->errorInfo, ERROR_INFO_SIZE, "Invalid cgroup option name: %s", filename);
                 return -1;
             }
             RAII_FD cgroupOptionFd = openat(cgroupPathFd, filename, O_WRONLY);

@@ -16,39 +16,24 @@ int tinyjailSetupContainerUserNamespace(
 
     RAII_FD procFd = open(procfsProcPath, 0);
     if (procFd < 0) {
-        snprintf(
-            result->errorInfo, 
-            ERROR_INFO_SIZE, 
-            "Could not open child process's /proc: %s. Is /proc mounted?",
-            strerror(errno)
-        );
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not open child process's /proc: %s. Is /proc mounted?", strerror(errno));
         return -1;
     }
-    if (tinyjailWriteFileAt(procFd, "uid_map", "0 %u 1\n", uid) != 0) {
-        snprintf(
-            result->errorInfo, 
-            ERROR_INFO_SIZE, 
-            "Could not set uid_map for child process: %s",
-            strerror(errno)
-        );
+    ALLOC_LOCAL_FORMAT_STRING(uidMapContents, "0 %u 1\n", uid);
+    RAII_FD uidMapFd = openat(procFd, "uid_map", O_WRONLY);
+    if (uidMapFd < 0 || write(uidMapFd, uidMapContents, lenuidMapContents) < lenuidMapContents) {
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not set uid_map for child process: %s", strerror(errno));
         return -1;
     }
-    if (tinyjailWriteFileAt(procFd, "setgroups", "deny") != 0) {
-        snprintf(
-            result->errorInfo, 
-            ERROR_INFO_SIZE, 
-            "Could not set setgroups deny for child process: %s",
-            strerror(errno)
-        );
+    RAII_FD setgroupsFd = openat(procFd, "setgroups", O_WRONLY);
+    if (setgroupsFd < 0 || write(setgroupsFd, "deny", strlen("deny")) < strlen("deny")) {
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not set setgroups for child process: %s", strerror(errno));
         return -1;
     }
-    if (tinyjailWriteFileAt(procFd, "gid_map", "0 %u 1\n", gid) != 0) {
-        snprintf(
-            result->errorInfo, 
-            ERROR_INFO_SIZE, 
-            "Could not set gid_map for child process: %s",
-            strerror(errno)
-        );
+    ALLOC_LOCAL_FORMAT_STRING(gidMapContents, "0 %u 1\n", gid);
+    RAII_FD gidMapFd = openat(procFd, "gid_map", O_WRONLY);
+    if (gidMapFd < 0 || write(gidMapFd, gidMapContents, lengidMapContents) < lengidMapContents) {
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not set gid_map for child process: %s", strerror(errno));
         return -1;
     }
     return 0;

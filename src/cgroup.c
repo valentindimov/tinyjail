@@ -91,37 +91,25 @@ int tinyjailSetupContainerCgroup(
                 );
                 return -1;
             }
-            if (tinyjailWriteFileAt(cgroupPathFd, filename, "%s", contents) != 0) {
-                snprintf(
-                    result->errorInfo,
-                    ERROR_INFO_SIZE,
-                    "Failed to apply cgroup option %s: %s",
-                    filename,
-                    strerror(errno)
-                );
+            RAII_FD cgroupOptionFd = openat(cgroupPathFd, filename, O_WRONLY);
+            size_t lencontents = strlen(contents);
+            if (cgroupOptionFd < 0 || write(cgroupOptionFd, contents, lencontents) < lencontents) {
+                snprintf(result->errorInfo,ERROR_INFO_SIZE,"Failed to apply cgroup option %s: %s", filename, strerror(errno));
                 return -1;
             }
         } else {
             // We did not find an '=' sign, the string was malformed
-            snprintf(
-                result->errorInfo,
-                ERROR_INFO_SIZE,
-                "Cgroup option %s is missing a value (missing '=')",
-                filename
-            );
+            snprintf(result->errorInfo, ERROR_INFO_SIZE, "Cgroup option %s is missing a value (missing '=')", filename);
             return 1;
         }
     }
 
     // Move the child process to the cgroup
-    if (tinyjailWriteFileAt(cgroupPathFd, "cgroup.procs", "%d", childPid) != 0) {
-        snprintf(
-            result->errorInfo,
-            ERROR_INFO_SIZE,
-            "Could not move container process to cgroup: %s",
-            strerror(errno)
-        );
-        return -1; 
+    ALLOC_LOCAL_FORMAT_STRING(childPidStr, "%d", childPid);
+    RAII_FD cgroupChildPidFd = openat(cgroupPathFd, "cgroup.procs", O_WRONLY);
+    if (cgroupChildPidFd < 0 || write(cgroupChildPidFd, childPidStr, lenchildPidStr) < lenchildPidStr) {
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not move container process to cgroup: %s", strerror(errno));
+        return -1;
     }
 
     return 0;

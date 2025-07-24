@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+// _GNU_SOURCE is needed for setns(), unshare(), clone(), and namespace-related flags for clone().
 #define _GNU_SOURCE
 
 #include <alloca.h>
@@ -34,6 +35,7 @@ static void closep(int* fd) {
 }
 
 /// @brief Defines a special type of FD that gets automatically closed when it exits scope. Use closep() to close it earlier, that function is idempotent.
+/// Unfortunately this is a non-standard extension, so it will only compile with gcc or clang. But it's so useful for simplifying error handling, it's worth losing that portability...
 #define RAII_FD __attribute__((cleanup(closep))) int
 
 /// @brief Checks if a given string represents a filename (not a path) which is not "." or ".."

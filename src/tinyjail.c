@@ -17,13 +17,39 @@
 #include "userns.h"
 #include "child.h"
 
-static void rmdirp(char **dir) {
-    if (*dir != NULL) {
-        rmdir(*dir);
+static int finishConfiguringAndAwaitContainerProcess(
+    struct tinyjailContainerParams *containerParams,
+    struct tinyjailContainerResult *result,
+    char* containerId,
+    char* containerCgroupPath,
+    int childPid,
+    int uid,
+    int gid,
+    int syncPipeWrite,
+    int errorPipeRead
+) {
+    if (tinyjailSetupContainerCgroup(containerCgroupPath, childPid, uid, gid, containerParams, result) != 0) {
+        return -1;
     }
+    if (tinyjailSetupContainerUserNamespace(childPid, uid, gid, result) != 0) {
+        return -1;
+    }
+    if (tinyjailSetupContainerNetwork(childPid, containerId, containerParams, result) != 0) {
+        return -1;
+    }
+    if (write(syncPipeWrite, "OK", 2) != 2) {
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not give the child the go-ahead signal: %s", strerror(errno));
+        return -1;
+    }
+    if (read(errorPipeRead, result->errorInfo, ERROR_INFO_SIZE - 1) > 0) {
+        return -1;
+    }
+    if (waitpid(childPid, &(result->containerExitStatus), __WALL) < 0) {
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "waitpid() failed: %s", strerror(errno));
+        return -1;
+    }
+    return 0;
 }
-
-#define RAII_DIR __attribute__((cleanup(rmdirp))) char*
 
 struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerParams containerParams) {
     struct tinyjailContainerResult result = {0};
@@ -97,14 +123,6 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
         return result;
     }
 
-    // Create a cgroup for the child process (it will be deleted when the variable goes out of scope)
-    ALLOC_LOCAL_FORMAT_STRING(_containerCgroupPath, "/sys/fs/cgroup/container_%s", containerId);
-    RAII_DIR containerCgroupPath = _containerCgroupPath;
-    if (mkdir(containerCgroupPath, 0770) != 0) {
-        snprintf(result.errorInfo, ERROR_INFO_SIZE, "Could not create cgroup: %s. Make sure /sys/fs/cgroup is mounted.", strerror(errno));
-        return result;
-    }
-
     // Start the child process and close the read end of the sync pipe (it is for the child process only)
     // Do not unshare the cgroup namespace just yet - the subprocess will do this, after we have moved it to the right cgroup. 
     struct ContainerChildLauncherArgs args = {
@@ -141,26 +159,38 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
         snprintf(result.errorInfo, ERROR_INFO_SIZE, "clone() failed: %s", strerror(errno));
         return result;
     }
-    close(syncPipeRead);
-    syncPipeRead = -1; // Make sure to set this to -1 to avoid closing it again when it exits scope
-    close(errorPipeWrite);
-    errorPipeWrite = -1; // Make sure to set this to -1 to avoid closing it again when it exits scope
+    closep(&syncPipeRead); // closep() is idempotent because it also sets the FD variable to -1
+    closep(&errorPipeWrite); // closep() is idempotent because it also sets the FD variable to -1
 
-    if (
-        tinyjailSetupContainerCgroup(containerCgroupPath, childPid, uid, gid, &containerParams, &result) != 0
-        || tinyjailSetupContainerUserNamespace(childPid, uid, gid, &result) != 0
-        || tinyjailSetupContainerNetwork(childPid, containerId, &containerParams, &result) != 0
-        || write(syncPipeWrite, "OK", 2) != 2 // TODO: logError("Could not give the child the go-ahead signal: %s", strerror(errno))
-        || (read(errorPipeRead, result.errorInfo, ERROR_INFO_SIZE - 1) > 0)
-        || waitpid(childPid, &(result.containerExitStatus), __WALL) < 0 // TODO: logError("waitpid() failed: %s", strerror(errno)); 
-    ) {
+    // Create a cgroup for the child process
+    ALLOC_LOCAL_FORMAT_STRING(containerCgroupPath, "/sys/fs/cgroup/container_%s", containerId);
+    if (mkdir(containerCgroupPath, 0770) != 0) {
+        containerCgroupPath = NULL;
+        snprintf(result.errorInfo, ERROR_INFO_SIZE, "Could not create cgroup: %s. Make sure /sys/fs/cgroup is mounted.", strerror(errno));
+        return result;
+    }
+    // There is only one return point from this point on, so we're sure we will delete the container cgroup before returning.
+
+    if (finishConfiguringAndAwaitContainerProcess(
+        &containerParams,
+        &result,
+        containerId,
+        containerCgroupPath,
+        childPid,
+        uid,
+        gid,
+        syncPipeWrite,
+        errorPipeRead
+    ) != 0) {
         kill(childPid, SIGKILL);
         // The subroutines should have set an error message already
         result.containerStartedStatus = -1;
     }
-    // As we clean up, make sure to vacuum up any leftover child processes
+
+    // Before returning, make sure to vacuum up any leftover child processes and remove the cgroup
     int tmp;
     while (wait(&tmp) > 0) {}
+    rmdir(containerCgroupPath);
 
     return result;
 }

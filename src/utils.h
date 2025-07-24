@@ -10,6 +10,8 @@
     char* VARNAME = alloca((len##VARNAME + 1) * sizeof(char)); \
     snprintf(VARNAME, len##VARNAME + 1, FORMAT, __VA_ARGS__);
 
+/// @brief Closes a fire descriptor and sets it to -1 if it is nonnegative. If it is negative, does nothing.
+/// @param fd Pointer to the file descriptor variable
 void closep(int* fd);
 #define RAII_FD __attribute__((cleanup(closep))) int
 

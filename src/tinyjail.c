@@ -6,6 +6,7 @@
 #include <alloca.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -440,6 +441,19 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     if (containerParams.networkBridgeName && containerParams.networkPeerIpAddr) {
         result.containerStartedStatus = -1;
         snprintf(result.errorInfo, ERROR_INFO_SIZE, "containerParams cannot have both networkBridgeName and networkPeerIPAddr set.");
+        return result;
+    }
+    char resolvedRootPath[(PATH_MAX + 1) * sizeof(char)];
+    memset(resolvedRootPath, 0, sizeof(resolvedRootPath));
+    if (realpath(containerParams.containerDir, resolvedRootPath) == NULL) {
+        result.containerStartedStatus = -1;
+        snprintf(result.errorInfo, ERROR_INFO_SIZE, "Could not resolve path %s: %s", containerParams.containerDir, strerror(errno));
+        return result;
+    }
+    containerParams.containerDir = resolvedRootPath;
+    if (strcmp(containerParams.containerDir, "/") == 0) {
+        result.containerStartedStatus = -1;
+        snprintf(result.errorInfo, ERROR_INFO_SIZE, "Container root dir cannot be /");
         return result;
     }
 

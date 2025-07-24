@@ -59,38 +59,22 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     // Validate container parameters
     if (!containerParams.commandList) {
         result.containerStartedStatus = -1;
-        snprintf(
-            result.errorInfo,
-            ERROR_INFO_SIZE,
-            "containerParams missing required parameter: commandList."
-        );
+        snprintf(result.errorInfo, ERROR_INFO_SIZE, "containerParams missing required parameter: commandList.");
         return result;
     }
     if (!containerParams.containerDir) {
         result.containerStartedStatus = -1;
-        snprintf(
-            result.errorInfo,
-            ERROR_INFO_SIZE,
-            "containerParams missing required parameter: containerDir."
-        );
+        snprintf(result.errorInfo, ERROR_INFO_SIZE, "containerParams missing required parameter: containerDir.");
         return result;
     }
     if (!containerParams.environment) {
         result.containerStartedStatus = -1;
-        snprintf(
-            result.errorInfo,
-            ERROR_INFO_SIZE,
-            "containerParams missing required parameter: environment."
-        );
+        snprintf(result.errorInfo, ERROR_INFO_SIZE, "containerParams missing required parameter: environment.");
         return result;
     }
     if (containerParams.networkBridgeName && containerParams.networkPeerIpAddr) {
         result.containerStartedStatus = -1;
-        snprintf(
-            result.errorInfo,
-            ERROR_INFO_SIZE,
-            "containerParams cannot have both networkBridgeName and networkPeerIPAddr set."
-        );
+        snprintf(result.errorInfo, ERROR_INFO_SIZE, "containerParams cannot have both networkBridgeName and networkPeerIPAddr set.");
         return result;
     }
 

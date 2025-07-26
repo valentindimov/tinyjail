@@ -21,10 +21,8 @@ The static binary `build/tinyjail` produced by the build script (whose main func
 Refer to the usage string produced by the binary for command-line arguments.
 
 ## System requirements
-`tinyjail` requires cgroups v2 to be enabled on the system, at least for the `cpu`, `pids`, and `memory` controllers. 
+`tinyjail` only supports cgroups v2, i.e. you can only set resource limits on cgroups v2 controllers. 
 You can disable the legacy cgroups v1 system by adding the `cgroup_no_v1=all` boot option to your kernel command line.
-
-It also requires both `/proc/` and `/sys/fs/cgroup/` to be mounted, with the `proc` and `cgroup2` filesystems respectively.
 
 ## Container directory, UID and GID mapping
 Your container's root directory is the filesystem root inside the container.

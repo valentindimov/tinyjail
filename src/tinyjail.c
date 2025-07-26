@@ -61,13 +61,16 @@ static int stringIsRegularFilename(const char* filename) {
 }
 
 static int configureContainerCgroup(
-    const char* containerCgroupPath,
+    const char* cgroupfsMountPath,
+    const char* containerId,
     int childPid,
     unsigned int uid, 
     unsigned int gid, 
     const struct tinyjailContainerParams* containerParams,
     struct tinyjailContainerResult *result
 ) {
+    // TODO remove this
+    ALLOC_LOCAL_FORMAT_STRING(containerCgroupPath, "%s/%s", cgroupfsMountPath, containerId);
     RAII_FD cgroupPathFd = open(containerCgroupPath, 0);
     if (cgroupPathFd < 0) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not open cgroup %s: %s.", containerCgroupPath, strerror(errno));
@@ -378,14 +381,21 @@ static int finishConfiguringAndAwaitContainerProcess(
     const struct tinyjailContainerParams *containerParams,
     struct tinyjailContainerResult *result,
     char* containerId,
-    char* containerCgroupPath,
     int childPid,
     int uid,
     int gid,
     int syncPipeWrite,
     int errorPipeRead
 ) {
-    if (configureContainerCgroup(containerCgroupPath, childPid, uid, gid, containerParams, result) != 0) {
+    if (mount("none", containerParams->containerDir, "cgroup2", 0, NULL) != 0) {
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not mount cgroupfs: %s", strerror(errno));
+        return -1;
+    }
+    if (configureContainerCgroup(containerParams->containerDir, containerId, childPid, uid, gid, containerParams, result) != 0) {
+        return -1;
+    }
+    if (umount2(containerParams->containerDir, MNT_DETACH) != 0) {
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not umount temporary cgroupfs mount: %s", strerror(errno));
         return -1;
     }
     if (configureContainerUserNamespace(childPid, uid, gid, result) != 0) {
@@ -515,11 +525,18 @@ static void runContainerLauncher(const struct tinyjailContainerParams *container
     closep(&syncPipeRead); // closep() is idempotent because it also sets the FD variable to -1
     closep(&errorPipeWrite); // closep() is idempotent because it also sets the FD variable to -1
 
-    // Create a cgroup for the child process
-    ALLOC_LOCAL_FORMAT_STRING(containerCgroupPath, "/sys/fs/cgroup/container_%s", containerId);
-    if (mkdir(containerCgroupPath, 0770) != 0) {
-        containerCgroupPath = NULL;
-        RETURN_WITH_ERROR("Could not create cgroup: %s. Make sure /sys/fs/cgroup is mounted.", strerror(errno));
+    // Create a cgroup for the child process. Because we run in our own mount namespace here, we don't need to worry about cleaning up temporary mounts on failure
+    {
+        if (mount("none", containerParams->containerDir, "cgroup2", 0, NULL) != 0) {
+            RETURN_WITH_ERROR("Could not mount cgroupfs: %s", strerror(errno));
+        }
+        ALLOC_LOCAL_FORMAT_STRING(cgroupPath, "%s/%s", containerParams->containerDir, containerId);
+        if (mkdir(cgroupPath, 0770) != 0) {
+            RETURN_WITH_ERROR("Could not create cgroup: %s.", strerror(errno));
+        }
+        if (umount2(containerParams->containerDir, MNT_DETACH) != 0) {
+            RETURN_WITH_ERROR("Could not umount temporary cgroupfs mount: %s", strerror(errno));
+        }
     }
     // There is only one return point from this point on, so we're sure we will delete the container cgroup before returning.
 
@@ -527,7 +544,6 @@ static void runContainerLauncher(const struct tinyjailContainerParams *container
         containerParams,
         result,
         containerId,
-        containerCgroupPath,
         childPid,
         uid,
         gid,
@@ -539,10 +555,16 @@ static void runContainerLauncher(const struct tinyjailContainerParams *container
         result->containerStartedStatus = -1;
     }
 
-    // Before returning, make sure to vacuum up any leftover child processes and remove the cgroup
+    // Success. Now attempt final cleanup...
+    // Make sure to vacuum up any leftover child processes
     int tmp;
     while (wait(&tmp) > 0) {}
-    rmdir(containerCgroupPath);
+    // Make sure to remove the cgroup
+    if (mount("none", containerParams->containerDir, "cgroup2", 0, NULL) == 0) {
+        ALLOC_LOCAL_FORMAT_STRING(cgroupPath, "%s/%s", containerParams->containerDir, containerId);
+        rmdir(cgroupPath);
+        umount2(containerParams->containerDir, MNT_DETACH);
+    }
 
     return;
 

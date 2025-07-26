@@ -213,7 +213,7 @@ static int configureNetwork(
     int childPidFd,
     int myNetNsFd,
     const char* containerId,
-    struct tinyjailContainerParams *params,
+    const struct tinyjailContainerParams *params,
     struct tinyjailContainerResult *result
 ) {
     // Create the vEth pair -inside- the container, then move it outside of it by using the parent PID as the namespace PID.
@@ -276,7 +276,7 @@ static int configureNetwork(
 static int setupContainerNetwork(
     int childPid, 
     char* containerId, 
-    struct tinyjailContainerParams *params,
+    const struct tinyjailContainerParams *params,
     struct tinyjailContainerResult *result
 ) {
     // Get a handle on both the inside and outside network namespaces
@@ -296,7 +296,7 @@ static int setupContainerNetwork(
     return retval;
 }
 
-struct ContainerChildLauncherArgs {
+struct ContainerInitArgs {
     char* containerDir;
     char** commandList;
     char** environment;
@@ -309,7 +309,10 @@ struct ContainerChildLauncherArgs {
     int errorPipeRead;
 };
 
-static int containerChildLaunch(struct ContainerChildLauncherArgs *args) {
+/// @brief Runs the initial part of the container init process. Runs in a separate process.
+/// @param args Arguments for container initialization
+/// @return Nothing if it gets to execve()-ing the container entrypoint, otherwise returns -1 on failure.
+static int runContainerInit(struct ContainerInitArgs *args) {
     // We won't need the writing end of the sync pipe (and in case the parent crashes, we want to avoid being stuck waiting on ourselves)
     close(args->syncPipeWrite);
     close(args->errorPipeRead);
@@ -392,7 +395,7 @@ static int containerChildLaunch(struct ContainerChildLauncherArgs *args) {
 }
 
 static int finishConfiguringAndAwaitContainerProcess(
-    struct tinyjailContainerParams *containerParams,
+    const struct tinyjailContainerParams *containerParams,
     struct tinyjailContainerResult *result,
     char* containerId,
     char* containerCgroupPath,
@@ -425,35 +428,35 @@ static int finishConfiguringAndAwaitContainerProcess(
     return 0;
 }
 
-struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerParams containerParams) {
-    struct tinyjailContainerResult result = {0};
-
-#define RETURN_WITH_ERROR(...) result.containerStartedStatus = -1; snprintf(result.errorInfo, ERROR_INFO_SIZE, __VA_ARGS__); return result;
+/// @brief Runs the container launcher logic, in a separate subprocess.
+/// @param containerParams Input arg: the parameters for launching the container
+/// @param result Output arg: the result of the launch is written here
+static void runContainerLauncher(const struct tinyjailContainerParams *containerParams, struct tinyjailContainerResult *result) {
+#define RETURN_WITH_ERROR(...) result->containerStartedStatus = -1; snprintf(result->errorInfo, ERROR_INFO_SIZE, __VA_ARGS__); return;
 
     if (getuid() != 0) {
         RETURN_WITH_ERROR("tinyjail requires root permissions to run.");
     }
 
     // Validate container parameters
-    if (!containerParams.commandList) {
+    if (!containerParams->commandList) {
         RETURN_WITH_ERROR("containerParams missing required parameter: commandList.");
     }
-    if (!containerParams.containerDir) {
+    if (!containerParams->containerDir) {
         RETURN_WITH_ERROR("containerParams missing required parameter: containerDir.");
     }
-    if (!containerParams.environment) {
+    if (!containerParams->environment) {
         RETURN_WITH_ERROR("containerParams missing required parameter: environment.");
     }
-    if (containerParams.networkBridgeName && containerParams.networkPeerIpAddr) {
+    if (containerParams->networkBridgeName && containerParams->networkPeerIpAddr) {
         RETURN_WITH_ERROR("containerParams cannot have both networkBridgeName and networkPeerIPAddr set.");
     }
     char resolvedRootPath[(PATH_MAX + 1) * sizeof(char)];
     memset(resolvedRootPath, 0, sizeof(resolvedRootPath));
-    if (realpath(containerParams.containerDir, resolvedRootPath) == NULL) {
-        RETURN_WITH_ERROR("Could not resolve path %s: %s", containerParams.containerDir, strerror(errno));
+    if (realpath(containerParams->containerDir, resolvedRootPath) == NULL) {
+        RETURN_WITH_ERROR("Could not resolve path %s: %s", containerParams->containerDir, strerror(errno));
     }
-    containerParams.containerDir = resolvedRootPath;
-    if (strcmp(containerParams.containerDir, "/") == 0) {
+    if (strcmp(resolvedRootPath, "/") == 0) {
         RETURN_WITH_ERROR("Container root dir cannot be /");
     }
 
@@ -464,8 +467,8 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
 
     // Determine the UID and GID for the container as the owner of the container directory
     struct stat containerDirStat;
-    if (stat(containerParams.containerDir, &containerDirStat) != 0) {
-        RETURN_WITH_ERROR("Could not stat %s: %s", containerParams.containerDir, strerror(errno));
+    if (stat(containerParams->containerDir, &containerDirStat) != 0) {
+        RETURN_WITH_ERROR("Could not stat %s: %s", containerParams->containerDir, strerror(errno));
     }
     unsigned int uid = containerDirStat.st_uid;
     unsigned int gid = containerDirStat.st_gid;
@@ -489,11 +492,11 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
 
     // Start the child process and close the read end of the sync pipe (it is for the child process only)
     // Do not unshare the cgroup namespace just yet - the subprocess will do this, after we have moved it to the right cgroup. 
-    struct ContainerChildLauncherArgs args = {
-        .containerDir = containerParams.containerDir,
-        .commandList = containerParams.commandList,
-        .environment = containerParams.environment,
-        .workDir = containerParams.workDir,
+    struct ContainerInitArgs args = {
+        .containerDir = containerParams->containerDir,
+        .commandList = containerParams->commandList,
+        .environment = containerParams->environment,
+        .workDir = containerParams->workDir,
         .syncPipeRead = syncPipeRead,
         .syncPipeWrite = syncPipeWrite,
         .errorPipeRead = errorPipeRead,
@@ -513,14 +516,13 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     // This should be enough, but in either case, the child has its own memory map 
     // so even if it overruns the buffer, it shouldn't cause problems for us.
     int childPid = clone(
-        (int (*)(void *)) containerChildLaunch, 
+        (int (*)(void *)) runContainerInit, 
         (void*) (((char*) alloca(4096)) + 4095), 
         cloneFlags,
         (void*) &args
     );
     if (childPid < 0) {
         RETURN_WITH_ERROR("clone() failed: %s", strerror(errno));
-        return result;
     }
     closep(&syncPipeRead); // closep() is idempotent because it also sets the FD variable to -1
     closep(&errorPipeWrite); // closep() is idempotent because it also sets the FD variable to -1
@@ -529,14 +531,13 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     ALLOC_LOCAL_FORMAT_STRING(containerCgroupPath, "/sys/fs/cgroup/container_%s", containerId);
     if (mkdir(containerCgroupPath, 0770) != 0) {
         containerCgroupPath = NULL;
-        snprintf(result.errorInfo, ERROR_INFO_SIZE, "Could not create cgroup: %s. Make sure /sys/fs/cgroup is mounted.", strerror(errno));
-        return result;
+        RETURN_WITH_ERROR("Could not create cgroup: %s. Make sure /sys/fs/cgroup is mounted.", strerror(errno));
     }
     // There is only one return point from this point on, so we're sure we will delete the container cgroup before returning.
 
     if (finishConfiguringAndAwaitContainerProcess(
-        &containerParams,
-        &result,
+        containerParams,
+        result,
         containerId,
         containerCgroupPath,
         childPid,
@@ -547,7 +548,7 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     ) != 0) {
         kill(childPid, SIGKILL);
         // The subroutines should have set an error message already
-        result.containerStartedStatus = -1;
+        result->containerStartedStatus = -1;
     }
 
     // Before returning, make sure to vacuum up any leftover child processes and remove the cgroup
@@ -555,7 +556,50 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     while (wait(&tmp) > 0) {}
     rmdir(containerCgroupPath);
 
-    return result;
+    return;
 
+#undef RETURN_WITH_ERROR
+}
+
+struct tinyjailContainerResult tinyjailLaunchContainer(const struct tinyjailContainerParams containerParams) {
+    struct tinyjailContainerResult result = {0};
+
+#define RETURN_WITH_ERROR(...) result.containerStartedStatus = -1; snprintf(result.errorInfo, ERROR_INFO_SIZE, __VA_ARGS__); return result;
+
+    // Since we'll pipe in the result of the container launch, set up the pipe first
+    int resultPipe[2] = { -1, -1 };
+    if (pipe(resultPipe) != 0) {
+        RETURN_WITH_ERROR("pipe() failed: %s", strerror(errno));
+    }
+    RAII_FD resultPipeRead = resultPipe[0];
+    RAII_FD resultPipeWrite = resultPipe[1];
+
+    // Now run the container launch function in a subprocess.
+    int launcherPid = fork();
+    if (launcherPid < 0) {
+        RETURN_WITH_ERROR("fork() failed: %s", strerror(errno));
+    } else if (launcherPid == 0) {
+        // Child process logic goes here
+        closep(&resultPipeRead);
+        runContainerLauncher(&containerParams, &result);
+        write(resultPipeWrite, &result, sizeof(result));
+        closep(&resultPipeWrite);
+        exit(0);
+    } else {
+        closep(&resultPipeWrite);
+        size_t readResult = read(resultPipeRead, &result, sizeof(result));
+        int readResultErrno = errno;
+        closep(&resultPipeRead);
+        int launcherExitCode;
+        int launcherWaitpid = waitpid(launcherPid, &launcherExitCode, __WALL);
+        int launcherWaitpidErrno = errno;
+        if (readResult != sizeof(result)) {
+            RETURN_WITH_ERROR("Could not read() result back from launcher: %s", strerror(readResultErrno));
+        } else if (launcherWaitpid < 0) {
+            RETURN_WITH_ERROR("Could not waitpid() on launcher: %s", strerror(launcherWaitpidErrno));
+        } else {
+            return result;
+        }
+    }
 #undef RETURN_WITH_ERROR
 }

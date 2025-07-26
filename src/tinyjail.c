@@ -433,6 +433,9 @@ static void runContainerLauncher(const struct tinyjailContainerParams *container
     }
 
     // Validate container parameters
+    if (containerParams->containerId && strlen(containerParams->containerId) > 12) {
+        RETURN_WITH_ERROR("containerId can be at most 12 characters long.");
+    }
     if (!containerParams->commandList) {
         RETURN_WITH_ERROR("containerParams missing required parameter: commandList.");
     }
@@ -521,6 +524,9 @@ static void runContainerLauncher(const struct tinyjailContainerParams *container
 
     // The container ID should be less than 12 characters long since it's used to generate names for the network interfaces (which are capped at 15 characters)
     ALLOC_LOCAL_FORMAT_STRING(containerId, "tj_%d", childPid & 0xffffffff); // childPid being a 32-bit integer, the ID will be at most 12 characters long.
+    if (containerParams->containerId != NULL) {
+        containerId = containerParams->containerId;
+    }
 
     // Create a cgroup for the child process. Because we run in our own mount namespace here, we don't need to worry about cleaning up temporary mounts on failure
     {

@@ -30,6 +30,8 @@ int parseArgs(char** argv,
         if (strcmp(command, "--") == 0) {
             parsedArgs->commandList = currentArg;
             break;
+        } else if (strcmp(command, "--id") == 0) {
+            parsedArgs->containerId = *(currentArg++);
         } else if (strcmp(command, "--root") == 0) {
             parsedArgs->containerDir = *(currentArg++);
         } else if (strcmp(command, "--env") == 0) {
@@ -70,6 +72,7 @@ int main(int argc, char** argv) {
     if (parseArgs(argv, &programArgs, envStringsBuf, cgroupOptionsBuf) != 0) {
         printf(
             "Usage: ./jail --root <root directory> "
+            "[--id <container ID>] "
             "[--env <key>=<value>]* "
             "[--workdir <directory>] "
             "[--lowerdirs <dir1>:<dir2>:...] "

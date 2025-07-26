@@ -4,6 +4,9 @@
 
 /// @brief Encapsulates all parameters used to run a container process.
 struct tinyjailContainerParams {
+    /// @brief Optional explicit ID for the container. If left at NULL, an ID is generated based on the PID of the init process in the container.
+    char* containerId;
+
     /// @brief Path to the root directory of the container. Should be writeable.
     char* containerDir;
     /// @brief argv (NULL-terminated array of command args) for the container init process.

@@ -405,11 +405,15 @@ static int finishConfiguringAndAwaitContainerProcess(
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not mount cgroupfs: %s", strerror(errno));
         return -1;
     }
-    if (configureContainerCgroup(containerParams->containerDir, containerId, childPid, uid, gid, containerParams, result) != 0) {
+    // Make sure we unmount the cgroup2 mount, otherwise the cgroup cleanup won't work
+    int configureCgroupResult = configureContainerCgroup(containerParams->containerDir, containerId, childPid, uid, gid, containerParams, result);
+    int umount2Result = umount2(containerParams->containerDir, MNT_DETACH);
+    int umount2Errno = errno;
+    if (configureCgroupResult != 0) {
         return -1;
     }
-    if (umount2(containerParams->containerDir, MNT_DETACH) != 0) {
-        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not umount temporary cgroupfs mount: %s", strerror(errno));
+    if (umount2Result != 0) {
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not umount temporary cgroupfs mount: %s", strerror(umount2Errno));
         return -1;
     }
     if (configureContainerUserNamespace(childPid, uid, gid, result) != 0) {
@@ -532,17 +536,21 @@ static void runContainerLauncher(const struct tinyjailContainerParams *container
         containerId = containerParams->containerId;
     }
 
-    // Create a cgroup for the child process. Because we run in our own mount namespace here, we don't need to worry about cleaning up temporary mounts on failure
+    // Create a cgroup for the child process. Note that we run in our own network namespaces and we've set all mounts to private, so the host should not see this.
     {
         if (mount("none", containerParams->containerDir, "cgroup2", 0, NULL) != 0) {
             RETURN_WITH_ERROR("Could not mount cgroupfs: %s", strerror(errno));
         }
         ALLOC_LOCAL_FORMAT_STRING(cgroupPath, "%s/%s", containerParams->containerDir, containerId);
-        if (mkdir(cgroupPath, 0770) != 0) {
-            RETURN_WITH_ERROR("Could not create cgroup: %s.", strerror(errno));
+        int mkdirResult = mkdir(cgroupPath, 0770);
+        int mkdirErrno = errno;
+        int umount2Result = umount2(containerParams->containerDir, MNT_DETACH);
+        int umount2Errno = errno;
+        if (mkdirResult != 0) {
+            RETURN_WITH_ERROR("Could not create cgroup: %s.", strerror(mkdirErrno));
         }
-        if (umount2(containerParams->containerDir, MNT_DETACH) != 0) {
-            RETURN_WITH_ERROR("Could not umount temporary cgroupfs mount: %s", strerror(errno));
+        if (umount2Result!= 0) {
+            RETURN_WITH_ERROR("Could not umount temporary cgroupfs mount: %s", strerror(umount2Errno));
         }
     }
     // There is only one return point from this point on, so we're sure we will delete the container cgroup before returning.

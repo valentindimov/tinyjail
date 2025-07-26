@@ -446,6 +446,10 @@ static void runContainerLauncher(const struct tinyjailContainerParams *container
     if (unshare(CLONE_NEWNS) != 0) {
         RETURN_WITH_ERROR("Unsharing cgroup namespace in child failed: %s", strerror(errno));
     }
+    // Transition shared mounts to private mounts to prevent anything we do with mounts from propagating outside of the countainer
+    if (mount(NULL, "/", NULL, MS_PRIVATE | MS_REC, NULL) != 0) {
+        RETURN_WITH_ERROR("Could not set all mounts to private: %s", strerror(errno));
+    }
 
     // Validate container parameters
     if (containerParams->containerId && strlen(containerParams->containerId) > 12) {

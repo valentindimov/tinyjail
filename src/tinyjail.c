@@ -35,6 +35,33 @@ static void closep(int* fd) {
     }
 }
 
+/// @brief Splits an input string into two output strings at a delmiter character. Allocates no memory, but modifies the input string by setting delimiter bytes to NULL bytes.
+/// @param input The input string. It will be modified by this function.
+/// @param output_1 Output: The part of the input before the delimiter. Output undefined if the function fails.
+/// @param output_2 Output: The part of the input after the delimiter. Output undefined if the function fails.
+/// @param delim The delimiter character
+/// @return 0 if the string could be split, -1 if the split was unsuccessful (e.g. because the delimiter character was not found)
+static int splitString(char* input, char** output_1, char** output_2, char delim) {
+    if (input == NULL) {
+        return -1;
+    }
+    // Start from the beginning of the string and iterate until the string ends, or we find '='
+    *output_1 = input;
+    *output_2 = input;
+    while (**output_2 != '\0' && **output_2 != delim) {
+        *output_2 += 1;
+    }
+    if (**output_2 == delim) {
+        // Found the delimiter, replace it with a NULL and set output_2 to the remainder of the string.
+        **output_2 = '\0';
+        *output_2 += 1;
+        return 0;
+    } else {
+        // We did not find an the delimiter
+        return -1;
+    }
+}
+
 /// @brief Defines a special type of FD that gets automatically closed when it exits scope. Use closep() to close it earlier, that function is idempotent.
 /// Unfortunately this is a non-standard extension, so it will only compile with gcc or clang. But it's so useful for simplifying error handling, it's worth losing that portability...
 #define RAII_FD __attribute__((cleanup(closep))) int
@@ -99,35 +126,23 @@ static int configureContainerCgroup(
         // Later on we'll replace the first "=" in this copy with a NULL.
         // The first part (before the NULL) will be the filename in the cgroup folder
         // The second part (after the NULL) will be the contents to write there
-        unsigned long szOptionStr = strlen(*curOptPtr) + 1;
-        char* filename = alloca(szOptionStr);
-        memset(filename, 0, szOptionStr);
-        strncpy(filename, *curOptPtr, szOptionStr - 1);
-
-        // Start from the beginning of the string and iterate until the string ends, or we find '='
-        char* contents = filename;
-        while (*contents != '\0' && *contents != '=') {
-            contents++;
+        ALLOC_LOCAL_FORMAT_STRING(curOptCopy, "%s", *curOptPtr);
+        char* filename;
+        char* contents;
+        if (splitString(curOptCopy, &filename, &contents, '=') != 0) {
+            snprintf(result->errorInfo, ERROR_INFO_SIZE, "Malformed cgroup option: %s (missing =?)", filename);
+            return -1;
         }
-        if (*contents == '=') {
-            // Found '=', replace it with a NULL and use the remainder of the string as contents.
-            *contents = '\0';
-            contents++;
-            // Make sure we only try writing to files in the cgroup directory
-            if (!stringIsRegularFilename(filename)) {
-                snprintf(result->errorInfo, ERROR_INFO_SIZE, "Invalid cgroup option name: %s", filename);
-                return -1;
-            }
-            RAII_FD cgroupOptionFd = openat(cgroupPathFd, filename, O_WRONLY);
-            size_t lencontents = strlen(contents);
-            if (cgroupOptionFd < 0 || write(cgroupOptionFd, contents, lencontents) < lencontents) {
-                snprintf(result->errorInfo,ERROR_INFO_SIZE,"Failed to apply cgroup option %s: %s", filename, strerror(errno));
-                return -1;
-            }
-        } else {
-            // We did not find an '=' sign, the string was malformed
-            snprintf(result->errorInfo, ERROR_INFO_SIZE, "Cgroup option %s is missing a value (missing '=')", filename);
-            return 1;
+        // Make sure we only try writing to files in the cgroup directory
+        if (!stringIsRegularFilename(filename)) {
+            snprintf(result->errorInfo, ERROR_INFO_SIZE, "Invalid cgroup option name: %s", filename);
+            return -1;
+        }
+        RAII_FD cgroupOptionFd = openat(cgroupPathFd, filename, O_WRONLY);
+        size_t lencontents = strlen(contents);
+        if (cgroupOptionFd < 0 || write(cgroupOptionFd, contents, lencontents) < lencontents) {
+            snprintf(result->errorInfo,ERROR_INFO_SIZE,"Failed to apply cgroup option %s: %s", filename, strerror(errno));
+            return -1;
         }
     }
 

@@ -13,7 +13,6 @@
 #include <string.h>
 #include <sys/mount.h>
 #include <sys/prctl.h>
-#include <sys/random.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
@@ -455,11 +454,6 @@ static void runContainerLauncher(const struct tinyjailContainerParams *container
         RETURN_WITH_ERROR("Container root dir cannot be /");
     }
 
-    // Limit the container ID to 12 characters since it's used to generate names for the network interfaces (which are capped at 15 characters)
-    unsigned long random;
-    getrandom(&random, sizeof(random), 0);
-    ALLOC_LOCAL_FORMAT_STRING(containerId, "tj_%lx", random & 0xffffffffff);
-
     // Determine the UID and GID for the container as the owner of the container directory
     struct stat containerDirStat;
     if (stat(containerParams->containerDir, &containerDirStat) != 0) {
@@ -524,6 +518,9 @@ static void runContainerLauncher(const struct tinyjailContainerParams *container
     }
     closep(&syncPipeRead); // closep() is idempotent because it also sets the FD variable to -1
     closep(&errorPipeWrite); // closep() is idempotent because it also sets the FD variable to -1
+
+    // The container ID should be less than 12 characters long since it's used to generate names for the network interfaces (which are capped at 15 characters)
+    ALLOC_LOCAL_FORMAT_STRING(containerId, "tj_%d", childPid & 0xffffffff); // childPid being a 32-bit integer, the ID will be at most 12 characters long.
 
     // Create a cgroup for the child process. Because we run in our own mount namespace here, we don't need to worry about cleaning up temporary mounts on failure
     {

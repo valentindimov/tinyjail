@@ -497,25 +497,10 @@ static void runContainerLauncher(const struct tinyjailContainerParams *container
         .errorPipeRead = errorPipeRead,
         .errorPipeWrite = errorPipeWrite
     };
-    int cloneFlags = (
-        CLONE_NEWNS
-        | CLONE_NEWIPC
-        | CLONE_NEWPID
-        | CLONE_NEWUTS
-        | CLONE_NEWUSER
-        | CLONE_NEWTIME
-        | CLONE_NEWNET
-        | SIGCHLD
-    );
+    int cloneFlags = (CLONE_NEWNS | CLONE_NEWIPC | CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWUSER | CLONE_NEWTIME | CLONE_NEWNET | SIGCHLD);
     // The stack memory of the child is a local 4K buffer allocated in this function. 
-    // This should be enough, but in either case, the child has its own memory map 
-    // so even if it overruns the buffer, it shouldn't cause problems for us.
-    int childPid = clone(
-        (int (*)(void *)) runContainerInit, 
-        (void*) (((char*) alloca(4096)) + 4095), 
-        cloneFlags,
-        (void*) &args
-    );
+    // This should be enough, but in either case, the child has its own memory map so even if it overruns the buffer, it shouldn't cause problems for us.
+    int childPid = clone((int (*)(void *)) runContainerInit, (void*) (((char*) alloca(4096)) + 4095), cloneFlags, (void*) &args);
     if (childPid < 0) {
         RETURN_WITH_ERROR("clone() failed: %s", strerror(errno));
     }
@@ -543,16 +528,7 @@ static void runContainerLauncher(const struct tinyjailContainerParams *container
     }
     // There is only one return point from this point on, so we're sure we will delete the container cgroup before returning.
 
-    if (finishConfiguringAndAwaitContainerProcess(
-        containerParams,
-        result,
-        containerId,
-        childPid,
-        uid,
-        gid,
-        syncPipeWrite,
-        errorPipeRead
-    ) != 0) {
+    if (finishConfiguringAndAwaitContainerProcess(containerParams, result, containerId, childPid, uid, gid, syncPipeWrite, errorPipeRead) != 0) {
         kill(childPid, SIGKILL);
         // The subroutines should have set an error message already
         result->containerStartedStatus = -1;

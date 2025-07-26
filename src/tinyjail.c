@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
+#include <sys/prctl.h>
 #include <sys/random.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -322,6 +323,13 @@ static int containerChildLaunch(struct ContainerChildLauncherArgs *args) {
     }
     close(args->syncPipeRead);
 
+    // Set the container init process to be a subreaper, since most init processes expect it.
+    if (prctl(PR_SET_CHILD_SUBREAPER, 1) < 0) {
+        ALLOC_LOCAL_FORMAT_STRING(error, "Could not set container init as subreaper: %s", strerror(errno))
+        write(args->errorPipeWrite, error, strlen(error));
+        return -1;
+    }
+
     // Unshare the cgroup namespace here (after our parent has had the chance to move us to our cgroup)
     if (unshare(CLONE_NEWCGROUP) != 0) {
         ALLOC_LOCAL_FORMAT_STRING(error, "Unsharing cgroup namespace in child failed: %s", strerror(errno))
@@ -472,6 +480,11 @@ struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerP
     RAII_FD errorPipeWrite = errorPipe[1];
     if (!pipeSuccess) {
         RETURN_WITH_ERROR("pipe() failed: %s", strerror(errno));
+    }
+
+    // Set tinyjail itself as a subreaper, so that if the container init dies, we are the ones vacuuming up leftover children.
+    if (prctl(PR_SET_CHILD_SUBREAPER, 1) < 0) {
+        RETURN_WITH_ERROR("Could not set container init as subreaper: %s", strerror(errno));
     }
 
     // Start the child process and close the read end of the sync pipe (it is for the child process only)

@@ -6,7 +6,7 @@
 * Basic container networking
 
 ## Acknowledgement
-A special thanks goes to [TNG Technology Consuling GmbH](https://www.tngtech.com/en/) for their support in developing this tool.
+A special thanks goes to [TNG Technology Consulting GmbH](https://www.tngtech.com/en/) for their support in developing this tool.
 
 ## Building
 The build script [build.sh](./build.sh) will build the utility, both as a statically-linked binary and a dynamic library you can link into your own projects. 

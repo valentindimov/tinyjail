@@ -1,18 +1,24 @@
 // SPDX-License-Identifier: MIT
 
 #include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mount.h>
+#include <sys/prctl.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
+#include <sys/random.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <alloca.h>
-#include <sys/random.h>
-#include <stdint.h>
 
 #include "tinyjail.h"
 #include "launcher.h"
 #include "utils.h"
+#include <linux/limits.h>
 
 struct tinyjailContainerResult tinyjailLaunchContainer(
     struct tinyjailContainerParams containerParams
@@ -29,8 +35,45 @@ struct tinyjailContainerResult tinyjailLaunchContainer(
         containerParams.containerId = randomContainerId;
     }
 
-    // Validate the container parameters
-    // TODO: move this from launcher.c
+    // Resolve the container root path to an absolute one
+    char resolvedRootPath[(PATH_MAX + 1) * sizeof(char)];
+    memset(resolvedRootPath, 0, sizeof(resolvedRootPath));
+    if (realpath(containerParams.containerDir, resolvedRootPath) == NULL) {
+        RETURN_WITH_ERROR("Could not resolve path %s: %s", containerParams.containerDir, strerror(errno));
+    }
+    if (strcmp(resolvedRootPath, "/") == 0) {
+        RETURN_WITH_ERROR("Container root dir cannot be /");
+    }
+    containerParams.containerDir = resolvedRootPath;
+
+    // Determine the UID and GID for the container as the owner of the container directory
+    struct stat containerDirStat;
+    if (stat(containerParams.containerDir, &containerDirStat) != 0) {
+        RETURN_WITH_ERROR("Could not stat %s: %s", containerParams.containerDir, strerror(errno));
+    }
+    if (containerParams.uid == -1) {
+        containerParams.uid = containerDirStat.st_uid;
+    }
+    if (containerParams.gid == -1) {
+        containerParams.gid = containerDirStat.st_gid;
+    }
+
+    // Validate container parameters
+    if (containerParams.containerId && strlen(containerParams.containerId) > 12) {
+        RETURN_WITH_ERROR("containerId can be at most 12 characters long.");
+    }
+    if (!containerParams.commandList) {
+        RETURN_WITH_ERROR("containerParams missing required parameter: commandList.");
+    }
+    if (!containerParams.containerDir) {
+        RETURN_WITH_ERROR("containerParams missing required parameter: containerDir.");
+    }
+    if (!containerParams.environment) {
+        RETURN_WITH_ERROR("containerParams missing required parameter: environment.");
+    }
+    if (containerParams.networkBridgeName && containerParams.networkPeerIpAddr) {
+        RETURN_WITH_ERROR("containerParams cannot have both networkBridgeName and networkPeerIPAddr set.");
+    }
 
     // Since we'll pipe in the result of the container launch, set up the pipe first
     int resultPipe[2] = { -1, -1 };

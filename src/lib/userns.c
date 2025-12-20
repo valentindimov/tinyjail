@@ -18,8 +18,7 @@
 static int configureContainerUserNamespace(
     const char* procfsPath,
     int childPid, 
-    int uid, 
-    int gid, 
+    const struct tinyjailContainerParams* containerParams,
     struct tinyjailContainerResult *result
 ) {
     ALLOC_LOCAL_FORMAT_STRING(procfsProcPath, "%s/%d", procfsPath, childPid);
@@ -29,7 +28,7 @@ static int configureContainerUserNamespace(
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not open child process's procfs: %s.", strerror(errno));
         return -1;
     }
-    ALLOC_LOCAL_FORMAT_STRING(uidMapContents, "0 %u 1\n", uid);
+    ALLOC_LOCAL_FORMAT_STRING(uidMapContents, "0 %u 1\n", containerParams->uid);
     RAII_FD uidMapFd = openat(procFd, "uid_map", O_WRONLY);
     if (uidMapFd < 0 || write(uidMapFd, uidMapContents, lenuidMapContents) < lenuidMapContents) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not set uid_map for child process: %s", strerror(errno));
@@ -40,7 +39,7 @@ static int configureContainerUserNamespace(
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not set setgroups for child process: %s", strerror(errno));
         return -1;
     }
-    ALLOC_LOCAL_FORMAT_STRING(gidMapContents, "0 %u 1\n", gid);
+    ALLOC_LOCAL_FORMAT_STRING(gidMapContents, "0 %u 1\n", containerParams->gid);
     RAII_FD gidMapFd = openat(procFd, "gid_map", O_WRONLY);
     if (gidMapFd < 0 || write(gidMapFd, gidMapContents, lengidMapContents) < lengidMapContents) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not set gid_map for child process: %s", strerror(errno));
@@ -51,8 +50,6 @@ static int configureContainerUserNamespace(
 
 int setupContainerUserNamespace(
     int childPid, 
-    int uid, 
-    int gid, 
     const struct tinyjailContainerParams* containerParams,
     struct tinyjailContainerResult *result
 ) {
@@ -60,7 +57,7 @@ int setupContainerUserNamespace(
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not mount temporary procfs: %s", strerror(errno));
         return -1;
     }
-    int configureUsernsResult = configureContainerUserNamespace(containerParams->containerDir, childPid, uid, gid, result);
+    int configureUsernsResult = configureContainerUserNamespace(containerParams->containerDir, childPid, containerParams, result);
     int umount2Result = umount2(containerParams->containerDir, MNT_DETACH);
     int umount2Errno = errno;
     if (configureUsernsResult != 0) {

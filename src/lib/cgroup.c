@@ -18,8 +18,6 @@
 static int configureContainerCgroup(
     const char* cgroupfsMountPath,
     int childPid,
-    unsigned int uid, 
-    unsigned int gid, 
     const struct tinyjailContainerParams* containerParams,
     struct tinyjailContainerResult *result
 ) {
@@ -30,19 +28,19 @@ static int configureContainerCgroup(
         return -1;
     }
     // Set up delegation
-    if (fchownat(cgroupPathFd, ".", uid, gid, 0) != 0) {
+    if (fchownat(cgroupPathFd, ".", containerParams->uid, containerParams->gid, 0) != 0) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not delegate container cgroup: %s", strerror(errno));
         return -1; 
     }
-    if (fchownat(cgroupPathFd, "cgroup.procs", uid, gid, 0) != 0) {
+    if (fchownat(cgroupPathFd, "cgroup.procs", containerParams->uid, containerParams->gid, 0) != 0) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not delegate container cgroup.procs: %s", strerror(errno));
         return -1; 
     }
-    if (fchownat(cgroupPathFd, "cgroup.subtree_control", uid, gid, 0) != 0) {
+    if (fchownat(cgroupPathFd, "cgroup.subtree_control", containerParams->uid, containerParams->gid, 0) != 0) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not delegate container cgroup.subtree_control: %s", strerror(errno));
         return -1; 
     }
-    if (fchownat(cgroupPathFd, "cgroup.threads", uid, gid, 0) != 0) {
+    if (fchownat(cgroupPathFd, "cgroup.threads", containerParams->uid, containerParams->gid, 0) != 0) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not delegate container cgroup.threads: %s", strerror(errno));
         return -1; 
     }
@@ -86,8 +84,6 @@ static int configureContainerCgroup(
 
 int setupContainerCgroup(
     int childPid,
-    unsigned int uid, 
-    unsigned int gid, 
     const struct tinyjailContainerParams* containerParams,
     struct tinyjailContainerResult *result
 ) {
@@ -96,7 +92,7 @@ int setupContainerCgroup(
         return -1;
     }
     // Make sure we unmount the cgroup2 mount, otherwise the cgroup cleanup won't work
-    int configureCgroupResult = configureContainerCgroup(containerParams->containerDir, childPid, uid, gid, containerParams, result);
+    int configureCgroupResult = configureContainerCgroup(containerParams->containerDir, childPid, containerParams, result);
     int umount2Result = umount2(containerParams->containerDir, MNT_DETACH);
     int umount2Errno = errno;
     if (configureCgroupResult != 0) {

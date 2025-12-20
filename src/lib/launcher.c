@@ -103,15 +103,13 @@ static int finishConfiguringAndAwaitContainerProcess(
     const struct tinyjailContainerParams *containerParams,
     struct tinyjailContainerResult *result,
     int childPid,
-    int uid,
-    int gid,
     int syncPipeWrite,
     int errorPipeRead
 ) {
-    if (setupContainerCgroup(childPid, uid, gid, containerParams, result) != 0) {
+    if (setupContainerCgroup(childPid, containerParams, result) != 0) {
         return -1;
     }
-    if (setupContainerUserNamespace(childPid, uid, gid, containerParams, result) != 0) {
+    if (setupContainerUserNamespace(childPid, containerParams, result) != 0) {
         return -1;
     }
     if (setupContainerNetwork(childPid, containerParams, result) != 0) {
@@ -149,39 +147,6 @@ void launchContainer(
     if (mount(NULL, "/", NULL, MS_PRIVATE | MS_REC, NULL) != 0) {
         RETURN_WITH_ERROR("Could not set all mounts to private: %s", strerror(errno));
     }
-
-    // Validate container parameters
-    if (containerParams->containerId && strlen(containerParams->containerId) > 12) {
-        RETURN_WITH_ERROR("containerId can be at most 12 characters long.");
-    }
-    if (!containerParams->commandList) {
-        RETURN_WITH_ERROR("containerParams missing required parameter: commandList.");
-    }
-    if (!containerParams->containerDir) {
-        RETURN_WITH_ERROR("containerParams missing required parameter: containerDir.");
-    }
-    if (!containerParams->environment) {
-        RETURN_WITH_ERROR("containerParams missing required parameter: environment.");
-    }
-    if (containerParams->networkBridgeName && containerParams->networkPeerIpAddr) {
-        RETURN_WITH_ERROR("containerParams cannot have both networkBridgeName and networkPeerIPAddr set.");
-    }
-    char resolvedRootPath[(PATH_MAX + 1) * sizeof(char)];
-    memset(resolvedRootPath, 0, sizeof(resolvedRootPath));
-    if (realpath(containerParams->containerDir, resolvedRootPath) == NULL) {
-        RETURN_WITH_ERROR("Could not resolve path %s: %s", containerParams->containerDir, strerror(errno));
-    }
-    if (strcmp(resolvedRootPath, "/") == 0) {
-        RETURN_WITH_ERROR("Container root dir cannot be /");
-    }
-
-    // Determine the UID and GID for the container as the owner of the container directory
-    struct stat containerDirStat;
-    if (stat(containerParams->containerDir, &containerDirStat) != 0) {
-        RETURN_WITH_ERROR("Could not stat %s: %s", containerParams->containerDir, strerror(errno));
-    }
-    unsigned int uid = containerDirStat.st_uid;
-    unsigned int gid = containerDirStat.st_gid;
     
     // Set up the sync pipe for signalling the child process to begin execution, and one for passing error messages back
     int syncPipe[2] = { -1, -1 };
@@ -241,7 +206,7 @@ void launchContainer(
     }
     // There is only one return point from this point on, so we're sure we will delete the container cgroup before returning.
 
-    if (finishConfiguringAndAwaitContainerProcess(containerParams, result, childPid, uid, gid, syncPipeWrite, errorPipeRead) != 0) {
+    if (finishConfiguringAndAwaitContainerProcess(containerParams, result, childPid, syncPipeWrite, errorPipeRead) != 0) {
         kill(childPid, SIGKILL);
         // The subroutines should have set an error message already
         result->containerStartedStatus = -1;

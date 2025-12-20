@@ -17,6 +17,11 @@ struct tinyjailContainerParams {
     /// @brief Working directory for the container init process. If set to NULL, it will be "/"
     char* workDir;
 
+    /// @brief Host UID for the container to run as. If -1 is specified, the owner of the container root directory is used.
+    unsigned int uid;
+    /// @brief Host GID for the container to run as. If -1 is specified, the owner of the container root directory is used.
+    unsigned int gid;
+
     /// @brief NULL-terminated list of "filename=value" strings that specify cgroup options like resource limits.
     char** cgroupOptions;
 

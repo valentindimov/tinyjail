@@ -12,3 +12,9 @@ int setupContainerCgroup(
     const struct tinyjailContainerParams* containerParams,
     struct tinyjailContainerResult *result
 );
+
+/// @brief Attempts to clean the container cgroup after the container has exited.
+/// @param containerParams Container options object
+void cleanContainerCgroup(
+    const struct tinyjailContainerParams* containerParams
+);

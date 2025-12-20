@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include "cgroup.h"
 #include "utils.h"
 
@@ -14,6 +16,8 @@
 #include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <dirent.h>
 
 static int configureContainerCgroup(
     const char* cgroupfsMountPath,
@@ -104,4 +108,34 @@ int setupContainerCgroup(
     }
 
     return 0;
+}
+
+void deleteCgroupDir(
+    const char* path
+) {
+    // When clearing cgroups, we should make sure to delete child cgroups first.
+    // Effectively this means to recursively delete all subdirectories before this one.
+    // We could use nftw() here but it traverses in the wrong order - root first, children after.
+    DIR *openedDir = opendir(path);
+    if (openedDir != NULL) {
+        struct dirent *entry;
+        while((entry = readdir(openedDir)) != NULL) {
+            if (entry->d_type == DT_DIR) {
+                ALLOC_LOCAL_FORMAT_STRING(subdirPath, "%s/%s", path, entry->d_name);
+                deleteCgroupDir(subdirPath);
+            }
+        }
+        closedir(openedDir);
+    }
+    rmdir(path);
+}
+
+void cleanContainerCgroup(
+    const struct tinyjailContainerParams* containerParams
+) {
+    if (mount("none", containerParams->containerDir, "cgroup2", 0, NULL) == 0) {
+        ALLOC_LOCAL_FORMAT_STRING(cgroupPath, "%s/%s", containerParams->containerDir, containerParams->containerId);
+        deleteCgroupDir(cgroupPath);
+        umount2(containerParams->containerDir, MNT_DETACH);
+    }
 }

@@ -217,12 +217,7 @@ void launchContainer(
     int tmp;
     while (wait(&tmp) > 0) {}
     // Make sure to remove the cgroup
-    // TODO: This might not work if the container cgroup has child cgroups. Maybe we should have a more sophisticated recursive delete procedure here.
-    if (mount("none", containerParams->containerDir, "cgroup2", 0, NULL) == 0) {
-        ALLOC_LOCAL_FORMAT_STRING(cgroupPath, "%s/%s", containerParams->containerDir, containerParams->containerId);
-        rmdir(cgroupPath);
-        umount2(containerParams->containerDir, MNT_DETACH);
-    }
+    cleanContainerCgroup(containerParams);
 
     return;
 

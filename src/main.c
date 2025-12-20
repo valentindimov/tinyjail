@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <alloca.h>
 
-#include "tinyjail.h"
+#include "lib/tinyjail.h"
 
 int parseArgs(char** argv, 
               struct tinyjailContainerParams *parsedArgs, 
@@ -40,8 +40,6 @@ int parseArgs(char** argv,
             *(cgroupOptionsBuffer++) = *(currentArg++);
         } else if (strcmp(command, "--workdir") == 0) {
             parsedArgs->workDir = *(currentArg++);
-        } else if (strcmp(command, "--lowerdirs") == 0) {
-            parsedArgs->lowerDirs = *(currentArg++);
         } else if (strcmp(command, "--network-bridge") == 0) {
             parsedArgs->networkBridgeName = *(currentArg++);
         } else if (strcmp(command, "--ip-address") == 0) {
@@ -75,7 +73,6 @@ int main(int argc, char** argv) {
             "[--id <container ID>] "
             "[--env <key>=<value>]* "
             "[--workdir <directory>] "
-            "[--lowerdirs <dir1>:<dir2>:...] "
             "[--cgroup <option>=<value>] "
             "[--network-bridge <device name>] "
             "[--ip-address <address>] "

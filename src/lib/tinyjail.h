@@ -17,10 +17,6 @@ struct tinyjailContainerParams {
     /// @brief Working directory for the container init process. If set to NULL, it will be "/"
     char* workDir;
 
-    /// @brief Colon-separated list of read-only directories to overlay the container FS over. Set to NULL for no overlaying.
-    // TODO implement this
-    char* lowerDirs; // sudo mount -t overlay overlay -olowerdir=./lower:./lower2,upperdir=./upper,workdir=./work ./upper
-
     /// @brief NULL-terminated list of "filename=value" strings that specify cgroup options like resource limits.
     char** cgroupOptions;
 

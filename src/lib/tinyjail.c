@@ -20,162 +20,8 @@
 #include "tinyjail.h"
 #include "utils.h"
 #include "cgroup.h"
-
-static int configureContainerUserNamespace(
-    int childPid, 
-    int uid, 
-    int gid, 
-    struct tinyjailContainerResult *result
-) {
-    ALLOC_LOCAL_FORMAT_STRING(procfsProcPath, "/proc/%d", childPid);
-
-    RAII_FD procFd = open(procfsProcPath, 0);
-    if (procFd < 0) {
-        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not open child process's /proc: %s. Is /proc mounted?", strerror(errno));
-        return -1;
-    }
-    ALLOC_LOCAL_FORMAT_STRING(uidMapContents, "0 %u 1\n", uid);
-    RAII_FD uidMapFd = openat(procFd, "uid_map", O_WRONLY);
-    if (uidMapFd < 0 || write(uidMapFd, uidMapContents, lenuidMapContents) < lenuidMapContents) {
-        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not set uid_map for child process: %s", strerror(errno));
-        return -1;
-    }
-    RAII_FD setgroupsFd = openat(procFd, "setgroups", O_WRONLY);
-    if (setgroupsFd < 0 || write(setgroupsFd, "deny", strlen("deny")) < strlen("deny")) {
-        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not set setgroups for child process: %s", strerror(errno));
-        return -1;
-    }
-    ALLOC_LOCAL_FORMAT_STRING(gidMapContents, "0 %u 1\n", gid);
-    RAII_FD gidMapFd = openat(procFd, "gid_map", O_WRONLY);
-    if (gidMapFd < 0 || write(gidMapFd, gidMapContents, lengidMapContents) < lengidMapContents) {
-        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not set gid_map for child process: %s", strerror(errno));
-        return -1;
-    }
-    return 0;
-}
-
-static int createVethPair(char* if1, char* if2) {
-    // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
-    ALLOC_LOCAL_FORMAT_STRING(command, "ip link add dev %s type veth peer %s", if1, if2);
-    return system(command);
-}
-
-static int setMasterOfInterface(char* interface, char* master) {
-    // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
-    ALLOC_LOCAL_FORMAT_STRING(command, "ip link set %s master %s", interface, master);
-    return system(command);
-}
-
-static int enableInterface(char* interface) {
-    // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
-    ALLOC_LOCAL_FORMAT_STRING(command, "ip link set %s up", interface);
-    return system(command);
-}
-
-static int moveInterfaceToNamespaceByFd(char* interface, int fd) {
-    // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
-    ALLOC_LOCAL_FORMAT_STRING(command, "ip link set %s netns /proc/self/fd/%d", interface, fd);
-    return system(command);
-}
-
-static int addAddressToInterface(char* interface, char* address) {
-    // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
-    ALLOC_LOCAL_FORMAT_STRING(command, "ip addr add %s dev %s", address, interface);
-    return system(command);
-}
-
-static int addDefaultRouteToInterface(char* targetAddress, char* targetInterface) {
-    // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
-    ALLOC_LOCAL_FORMAT_STRING(command, "ip route add default via %s dev %s", targetAddress, targetInterface);
-    return system(command);
-}
-
-static int configureNetwork(
-    int childPidFd,
-    int myNetNsFd,
-    const char* containerId,
-    const struct tinyjailContainerParams *params,
-    struct tinyjailContainerResult *result
-) {
-    // Create the vEth pair -inside- the container, then move it outside of it by using the parent PID as the namespace PID.
-    // This saves us from having to delete the interface to clean up - when the container dies, the interface is automatically cleaned up.
-    ALLOC_LOCAL_FORMAT_STRING(vethNameInside, "i_%s", containerId);
-    ALLOC_LOCAL_FORMAT_STRING(vethNameOutside, "o_%s", containerId);
-
-    if (setns(childPidFd, CLONE_NEWNET) != 0) {
-        snprintf(result->errorInfo, ERROR_INFO_SIZE, "setns() to enter the container network namespace failed: %s", strerror(errno));
-        return -1;
-    }
-    if (createVethPair(vethNameInside, vethNameOutside) != 0) {
-        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Failed to create vEth pair %s-%s.", vethNameOutside, vethNameInside);
-        return -1;
-    }
-    if (moveInterfaceToNamespaceByFd(vethNameOutside, myNetNsFd) != 0) {
-        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Failed to move interface %s to outside network namespace.", vethNameOutside);
-        return -1;
-    }
-    if (enableInterface(vethNameInside) != 0) {
-        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Failed to enable inside interface %s.", vethNameInside);
-        return -1;
-    }
-    if (params->networkIpAddr) {
-        if (addAddressToInterface(vethNameInside, params->networkIpAddr) != 0) {
-            snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not add address %s to inside interace %s.", params->networkIpAddr, vethNameInside);
-            return -1;
-        }
-    }
-    if (params->networkDefaultRoute) {
-        if (addDefaultRouteToInterface(params->networkDefaultRoute, vethNameInside) != 0) {
-            snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not add default route %s to inside interace %s.", params->networkDefaultRoute, vethNameInside);
-            return -1;
-        }
-    }
-    if (setns(myNetNsFd, CLONE_NEWNET) != 0) {
-        snprintf(result->errorInfo, ERROR_INFO_SIZE, "setns() to go back to the host network namespace failed: %s", strerror(errno));
-        return -1;
-    }
-
-    if (params->networkPeerIpAddr) {
-        if (addAddressToInterface(vethNameOutside, params->networkPeerIpAddr) != 0) {
-            snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not add address %s to outside interace %s.", params->networkPeerIpAddr, vethNameOutside);
-            return -1;
-        }
-    }
-    if (params->networkBridgeName) {
-        if (setMasterOfInterface(vethNameOutside, params->networkBridgeName) != 0) {
-            snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not attach outside interace %s to bridge %s.", vethNameOutside, params->networkBridgeName);
-            return -1;
-        }
-    }
-    if (enableInterface(vethNameOutside) != 0) {
-        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Failed to enable outside interface %s.", vethNameOutside);
-        return -1;
-    }
-    return 0;
-}
-
-static int setupContainerNetwork(
-    int childPid, 
-    char* containerId, 
-    const struct tinyjailContainerParams *params,
-    struct tinyjailContainerResult *result
-) {
-    // Get a handle on both the inside and outside network namespaces
-    RAII_FD myNetNsFd = open("/proc/self/ns/net", O_RDONLY);
-    if (myNetNsFd < 0) {
-        snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not open /proc/self/ns/net: %s", strerror(errno));
-        return -1;
-    }
-    RAII_FD childPidFd = syscall(SYS_pidfd_open, childPid, 0);
-    if (childPidFd < 0) {
-        snprintf(result->errorInfo, ERROR_INFO_SIZE, "pidfd_open() on child PID failed: %s", strerror(errno));
-        return -1;
-    }
-    int retval = configureNetwork(childPidFd, myNetNsFd, containerId, params, result);
-    // Make sure we're in our own network namespace even if we failed
-    setns(myNetNsFd, CLONE_NEWNET);
-    return retval;
-}
+#include "network.h"
+#include "userns.h"
 
 struct ContainerInitArgs {
     char* containerDir;
@@ -268,7 +114,7 @@ static int finishConfiguringAndAwaitContainerProcess(
     if (setupContainerCgroup(containerId, childPid, uid, gid, containerParams, result) != 0) {
         return -1;
     }
-    if (configureContainerUserNamespace(childPid, uid, gid, result) != 0) {
+    if (setupContainerUserNamespace(childPid, uid, gid, containerParams, result) != 0) {
         return -1;
     }
     if (setupContainerNetwork(childPid, containerId, containerParams, result) != 0) {
@@ -300,7 +146,7 @@ static void runContainerLauncher(const struct tinyjailContainerParams *container
 
     // The container launcher already sets up the mounts for the container, so it runs in its own mount namespace.
     if (unshare(CLONE_NEWNS) != 0) {
-        RETURN_WITH_ERROR("Unsharing cgroup namespace in child failed: %s", strerror(errno));
+        RETURN_WITH_ERROR("Unsharing mount namespace in child failed: %s", strerror(errno));
     }
     // Transition shared mounts to private mounts to prevent anything we do with mounts from propagating outside of the countainer
     if (mount(NULL, "/", NULL, MS_PRIVATE | MS_REC, NULL) != 0) {

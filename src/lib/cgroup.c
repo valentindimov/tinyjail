@@ -17,14 +17,13 @@
 
 static int configureContainerCgroup(
     const char* cgroupfsMountPath,
-    const char* containerId,
     int childPid,
     unsigned int uid, 
     unsigned int gid, 
     const struct tinyjailContainerParams* containerParams,
     struct tinyjailContainerResult *result
 ) {
-    ALLOC_LOCAL_FORMAT_STRING(containerCgroupPath, "%s/%s", cgroupfsMountPath, containerId);
+    ALLOC_LOCAL_FORMAT_STRING(containerCgroupPath, "%s/%s", cgroupfsMountPath, containerParams->containerId);
     RAII_FD cgroupPathFd = open(containerCgroupPath, 0);
     if (cgroupPathFd < 0) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not open cgroup %s: %s.", containerCgroupPath, strerror(errno));
@@ -86,7 +85,6 @@ static int configureContainerCgroup(
 }
 
 int setupContainerCgroup(
-    const char* containerId,
     int childPid,
     unsigned int uid, 
     unsigned int gid, 
@@ -98,7 +96,7 @@ int setupContainerCgroup(
         return -1;
     }
     // Make sure we unmount the cgroup2 mount, otherwise the cgroup cleanup won't work
-    int configureCgroupResult = configureContainerCgroup(containerParams->containerDir, containerId, childPid, uid, gid, containerParams, result);
+    int configureCgroupResult = configureContainerCgroup(containerParams->containerDir, childPid, uid, gid, containerParams, result);
     int umount2Result = umount2(containerParams->containerDir, MNT_DETACH);
     int umount2Errno = errno;
     if (configureCgroupResult != 0) {

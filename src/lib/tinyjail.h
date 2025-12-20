@@ -4,7 +4,7 @@
 
 /// @brief Encapsulates all parameters used to run a container process.
 struct tinyjailContainerParams {
-    /// @brief Optional explicit ID for the container. If left at NULL, an ID is generated based on the PID of the init process in the container.
+    /// @brief Optional explicit ID for the container. If left at NULL, a random ID is generated.
     char* containerId;
 
     /// @brief Path to the root directory of the container. Should be writeable.
@@ -41,4 +41,6 @@ struct tinyjailContainerResult {
     char errorInfo[ERROR_INFO_SIZE];
 };
 
-__attribute__ ((visibility ("default"))) struct tinyjailContainerResult tinyjailLaunchContainer(struct tinyjailContainerParams programArgs);
+__attribute__ ((visibility ("default"))) struct tinyjailContainerResult tinyjailLaunchContainer(
+    struct tinyjailContainerParams programArgs
+);

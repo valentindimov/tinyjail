@@ -58,14 +58,13 @@ static int configureNetwork(
     const char* procfsPath,
     int childPidFd,
     int myNetNsFd,
-    const char* containerId,
     const struct tinyjailContainerParams *params,
     struct tinyjailContainerResult *result
 ) {
     // Create the vEth pair -inside- the container, then move it outside of it by using the parent PID as the namespace PID.
     // This saves us from having to delete the interface to clean up - when the container dies, the interface is automatically cleaned up.
-    ALLOC_LOCAL_FORMAT_STRING(vethNameInside, "i_%s", containerId);
-    ALLOC_LOCAL_FORMAT_STRING(vethNameOutside, "o_%s", containerId);
+    ALLOC_LOCAL_FORMAT_STRING(vethNameInside, "i_%s", params->containerId);
+    ALLOC_LOCAL_FORMAT_STRING(vethNameOutside, "o_%s", params->containerId);
 
     if (setns(childPidFd, CLONE_NEWNET) != 0) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "setns() to enter the container network namespace failed: %s", strerror(errno));
@@ -122,7 +121,6 @@ static int configureNetwork(
 static int setupContainerNetworkInner(
     const char* procfsPath,
     int childPid, 
-    char* containerId, 
     const struct tinyjailContainerParams *params,
     struct tinyjailContainerResult *result
 ) {
@@ -138,7 +136,7 @@ static int setupContainerNetworkInner(
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "pidfd_open() on child PID failed: %s", strerror(errno));
         return -1;
     }
-    int retval = configureNetwork(params->containerDir, childPidFd, myNetNsFd, containerId, params, result);
+    int retval = configureNetwork(params->containerDir, childPidFd, myNetNsFd, params, result);
     // Make sure we're in our own network namespace even if we failed
     setns(myNetNsFd, CLONE_NEWNET);
     return retval;
@@ -146,7 +144,6 @@ static int setupContainerNetworkInner(
 
 int setupContainerNetwork(
     int childPid, 
-    char* containerId, 
     const struct tinyjailContainerParams *params,
     struct tinyjailContainerResult *result
 ) {
@@ -154,7 +151,7 @@ int setupContainerNetwork(
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not mount temporary procfs: %s", strerror(errno));
         return -1;
     }
-    int configureUsernsResult = setupContainerNetworkInner(params->containerDir, childPid, containerId, params, result);
+    int configureUsernsResult = setupContainerNetworkInner(params->containerDir, childPid, params, result);
     int umount2Result = umount2(params->containerDir, MNT_DETACH);
     int umount2Errno = errno;
     if (configureUsernsResult != 0) {

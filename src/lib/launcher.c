@@ -102,20 +102,19 @@ static int runContainerInit(struct ContainerInitArgs *args) {
 static int finishConfiguringAndAwaitContainerProcess(
     const struct tinyjailContainerParams *containerParams,
     struct tinyjailContainerResult *result,
-    char* containerId,
     int childPid,
     int uid,
     int gid,
     int syncPipeWrite,
     int errorPipeRead
 ) {
-    if (setupContainerCgroup(containerId, childPid, uid, gid, containerParams, result) != 0) {
+    if (setupContainerCgroup(childPid, uid, gid, containerParams, result) != 0) {
         return -1;
     }
     if (setupContainerUserNamespace(childPid, uid, gid, containerParams, result) != 0) {
         return -1;
     }
-    if (setupContainerNetwork(childPid, containerId, containerParams, result) != 0) {
+    if (setupContainerNetwork(childPid, containerParams, result) != 0) {
         return -1;
     }
     if (write(syncPipeWrite, "OK", 2) != 2) {
@@ -223,18 +222,12 @@ void launchContainer(
     closep(&syncPipeRead); // closep() is idempotent because it also sets the FD variable to -1
     closep(&errorPipeWrite); // closep() is idempotent because it also sets the FD variable to -1
 
-    // The container ID should be less than 12 characters long since it's used to generate names for the network interfaces (which are capped at 15 characters)
-    ALLOC_LOCAL_FORMAT_STRING(containerId, "tj_%d", childPid & 0xffffffff); // childPid being a 32-bit integer, the ID will be at most 12 characters long.
-    if (containerParams->containerId != NULL) {
-        containerId = containerParams->containerId;
-    }
-
     // Create a cgroup for the child process. Note that we run in our own network namespaces and we've set all mounts to private, so the host should not see this.
     {
         if (mount("none", containerParams->containerDir, "cgroup2", 0, NULL) != 0) {
             RETURN_WITH_ERROR("Could not mount cgroupfs: %s", strerror(errno));
         }
-        ALLOC_LOCAL_FORMAT_STRING(cgroupPath, "%s/%s", containerParams->containerDir, containerId);
+        ALLOC_LOCAL_FORMAT_STRING(cgroupPath, "%s/%s", containerParams->containerDir, containerParams->containerId);
         int mkdirResult = mkdir(cgroupPath, 0770);
         int mkdirErrno = errno;
         int umount2Result = umount2(containerParams->containerDir, MNT_DETACH);
@@ -248,7 +241,7 @@ void launchContainer(
     }
     // There is only one return point from this point on, so we're sure we will delete the container cgroup before returning.
 
-    if (finishConfiguringAndAwaitContainerProcess(containerParams, result, containerId, childPid, uid, gid, syncPipeWrite, errorPipeRead) != 0) {
+    if (finishConfiguringAndAwaitContainerProcess(containerParams, result, childPid, uid, gid, syncPipeWrite, errorPipeRead) != 0) {
         kill(childPid, SIGKILL);
         // The subroutines should have set an error message already
         result->containerStartedStatus = -1;
@@ -261,7 +254,7 @@ void launchContainer(
     // Make sure to remove the cgroup
     // TODO: This might not work if the container cgroup has child cgroups. Maybe we should have a more sophisticated recursive delete procedure here.
     if (mount("none", containerParams->containerDir, "cgroup2", 0, NULL) == 0) {
-        ALLOC_LOCAL_FORMAT_STRING(cgroupPath, "%s/%s", containerParams->containerDir, containerId);
+        ALLOC_LOCAL_FORMAT_STRING(cgroupPath, "%s/%s", containerParams->containerDir, containerParams->containerId);
         rmdir(cgroupPath);
         umount2(containerParams->containerDir, MNT_DETACH);
     }

@@ -3,7 +3,6 @@
 // _GNU_SOURCE is needed for setns(), unshare(), clone(), and namespace-related flags for clone().
 #define _GNU_SOURCE
 
-#include <alloca.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -19,72 +18,7 @@
 #include <unistd.h>
 
 #include "tinyjail.h"
-
-/// @brief Allocates a locally-scoped (via alloca()) string using the provided format.
-#define ALLOC_LOCAL_FORMAT_STRING(VARNAME, FORMAT, ...) \
-    int len##VARNAME = snprintf("", 0, FORMAT, __VA_ARGS__); \
-    char* VARNAME = alloca((len##VARNAME + 1) * sizeof(char)); \
-    snprintf(VARNAME, len##VARNAME + 1, FORMAT, __VA_ARGS__);
-
-/// @brief Closes a fire descriptor and sets it to -1 if it is nonnegative. If it is negative, does nothing.
-/// @param fd Pointer to the file descriptor variable
-static void closep(int* fd) {
-    if (*fd >= 0) {
-        close(*fd);
-        *fd = -1;
-    }
-}
-
-/// @brief Splits an input string into two output strings at a delmiter character. Allocates no memory, but modifies the input string by setting delimiter bytes to NULL bytes.
-/// @param input The input string. It will be modified by this function.
-/// @param output_1 Output: The part of the input before the delimiter. Output undefined if the function fails.
-/// @param output_2 Output: The part of the input after the delimiter. Output undefined if the function fails.
-/// @param delim The delimiter character
-/// @return 0 if the string could be split, -1 if the split was unsuccessful (e.g. because the delimiter character was not found)
-static int splitString(char* input, char** output_1, char** output_2, char delim) {
-    if (input == NULL) {
-        return -1;
-    }
-    // Start from the beginning of the string and iterate until the string ends, or we find '='
-    *output_1 = input;
-    *output_2 = input;
-    while (**output_2 != '\0' && **output_2 != delim) {
-        *output_2 += 1;
-    }
-    if (**output_2 == delim) {
-        // Found the delimiter, replace it with a NULL and set output_2 to the remainder of the string.
-        **output_2 = '\0';
-        *output_2 += 1;
-        return 0;
-    } else {
-        // We did not find an the delimiter
-        return -1;
-    }
-}
-
-/// @brief Defines a special type of FD that gets automatically closed when it exits scope. Use closep() to close it earlier, that function is idempotent.
-/// Unfortunately this is a non-standard extension, so it will only compile with gcc or clang. But it's so useful for simplifying error handling, it's worth losing that portability...
-#define RAII_FD __attribute__((cleanup(closep))) int
-
-/// @brief Checks if a given string represents a filename (not a path) which is not "." or ".."
-/// @param filename The filename to check
-/// @return 1 if the string represents a regular filename, and 0 if it does not.
-/// Generally you can use this function to see if a user-supplied filename is safe to use.
-/// The function will reject filenames which can cause path traversal.
-static int stringIsRegularFilename(const char* filename) {
-    // Disallow empty strings and the special filenames "." and ".."
-    if (*filename == '\0' || strcmp(filename, ".") == 0 || strcmp(filename, "..") == 0) {
-        return 0;
-    }
-    // Reject any string containing slashes
-    while(*filename) {
-        if (*filename == '/') {
-            return 0;
-        }
-        filename++;
-    }
-    return 1;
-}
+#include "utils.h"
 
 static int configureContainerCgroup(
     const char* cgroupfsMountPath,
@@ -504,9 +438,6 @@ static void runContainerLauncher(const struct tinyjailContainerParams *container
     if (prctl(PR_SET_CHILD_SUBREAPER, 1) < 0) {
         RETURN_WITH_ERROR("Could not set container init as subreaper: %s", strerror(errno));
     }
-
-    // Set up the container's mounts
-    // TODO
 
     // Start the child process and close the read end of the sync pipe (it is for the child process only)
     // Do not unshare the cgroup namespace just yet - the subprocess will do this, after we have moved it to the right cgroup. 

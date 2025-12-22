@@ -38,7 +38,7 @@ static int enableInterface(char* interface) {
 
 static int moveInterfaceToNamespaceByFd(const char* procfsPath, char* interface, int fd) {
     // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
-    ALLOC_LOCAL_FORMAT_STRING(command, "ip link set %s netns %s/self/fd/%d", procfsPath, interface, fd);
+    ALLOC_LOCAL_FORMAT_STRING(command, "ip link set %s netns %s/self/fd/%d", interface, procfsPath, fd);
     return system(command);
 }
 

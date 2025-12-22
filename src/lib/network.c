@@ -14,6 +14,8 @@
 #include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <sys/socket.h>
+#include <linux/netlink.h>
 
 #include "network.h"
 #include "utils.h"
@@ -61,6 +63,24 @@ static int configureNetwork(
     const struct tinyjailContainerParams *params,
     struct tinyjailContainerResult *result
 ) {
+    // RTNETLINK socket created here and closed when exiting this function
+    RAII_FD netlinkSocket = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+    if (netlinkSocket <= 0) {
+        netlinkSocket = -1;
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "RTNETLINK socket() failed: %s", strerror(errno));
+        return -1;
+    }
+    struct sockaddr_nl bindInfo = {
+        .nl_family = AF_NETLINK,
+        .nl_pad = 0,
+        .nl_pid = getpid(),
+        .nl_groups = 0
+    };
+    if (bind(netlinkSocket, (struct sockaddr*) &bindInfo, sizeof(bindInfo)) != 0) {
+        snprintf(result->errorInfo, ERROR_INFO_SIZE, "RTNETLINK bind() failed: %s", strerror(errno));
+        return -1;
+    }
+
     // Create the vEth pair -inside- the container, then move it outside of it by using the parent PID as the namespace PID.
     // This saves us from having to delete the interface to clean up - when the container dies, the interface is automatically cleaned up.
     ALLOC_LOCAL_FORMAT_STRING(vethNameInside, "i_%s", params->containerId);

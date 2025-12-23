@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+// Needed for DT_DIR
 #define _GNU_SOURCE
 
 #include "cgroup.h"

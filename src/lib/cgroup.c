@@ -33,7 +33,7 @@ static int configureContainerCgroup(
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not open cgroup %s: %s.", containerCgroupPath, strerror(errno));
         return -1;
     }
-    // Set up delegation
+    // Set up delegation: TODO fix this
     if (fchownat(cgroupPathFd, ".", containerParams->uid, containerParams->gid, 0) != 0) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not delegate container cgroup: %s", strerror(errno));
         return -1; 

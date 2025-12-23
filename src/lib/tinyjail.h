@@ -19,10 +19,18 @@ struct tinyjailContainerParams {
     /// @brief Working directory for the container init process. If set to NULL, it will be "/"
     char* workDir;
 
-    /// @brief Host UID for the container to run as. If -1 is specified, the owner of the container root directory is used.
-    long uid;
-    /// @brief Host GID for the container to run as. If -1 is specified, the owner of the container root directory is used.
-    long gid;
+    /// @brief UID map in the format: "<container UID> <host UID> <mapping size>".
+    /// Use newlines to separate entries (TODO: semicolons should be supported as well)
+    /// The default UID map maps the owner UID of the container root dir to container UID 0.
+    char* uidMap;
+    /// @brief Container UID for the container process (default: 0)
+    unsigned long uid;
+    /// @brief GID map in the format: "<container GID> <host GID> <mapping size>".
+    /// Use newlines to separate entries (TODO: semicolons should be supported as well)
+    /// The default GID map maps the owner GID of the container root dir to container GID 0.
+    char* gidMap;
+    /// @brief Container GID for the container process (default: 0)
+    unsigned long gid;
 
     /// @brief NULL-terminated list of "filename=value" strings that specify cgroup options like resource limits.
     char** cgroupOptions;

@@ -92,8 +92,6 @@ int main(int argc, char** argv) {
     memset(cgroupOptionsBuf, 0, (argc + 1) * sizeof(char*));
 
     struct tinyjailContainerParams programArgs = {0};
-    programArgs.uid = -1;
-    programArgs.gid = -1;
     if (parseArgs(argv, &programArgs, envStringsBuf, cgroupOptionsBuf) != 0) {
         printf(
             "Usage: ./jail --root <root directory> "

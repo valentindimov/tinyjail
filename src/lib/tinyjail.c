@@ -33,6 +33,9 @@ struct tinyjailContainerResult tinyjailLaunchContainer(
     if (getuid() != 0) {
         RETURN_WITH_ERROR("tinyjail requires root permissions to run.");
     }
+
+    // Preprocess container params
+
     // If the container ID is NULL, generate a random 12-character hex ID
     uint64_t randInt = 0;
     getrandom(&randInt, sizeof(randInt), 0);
@@ -57,11 +60,13 @@ struct tinyjailContainerResult tinyjailLaunchContainer(
     if (stat(containerParams.containerDir, &containerDirStat) != 0) {
         RETURN_WITH_ERROR("Could not stat %s: %s", containerParams.containerDir, strerror(errno));
     }
-    if (containerParams.uid < 0) {
-        containerParams.uid = containerDirStat.st_uid;
+    ALLOC_LOCAL_FORMAT_STRING(defaultUidMap, "0 %lu 1\n", containerDirStat.st_uid);
+    ALLOC_LOCAL_FORMAT_STRING(defaultGidMap, "0 %lu 1\n", containerDirStat.st_gid);
+    if (containerParams.uidMap == NULL) {
+        containerParams.uidMap = defaultUidMap;
     }
-    if (containerParams.gid < 0) {
-        containerParams.gid = containerDirStat.st_gid;
+    if (containerParams.gidMap == NULL) {
+        containerParams.gidMap = defaultGidMap;
     }
 
     // Set default hostname if not specified

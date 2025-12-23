@@ -22,11 +22,7 @@
 #include "userns.h"
 
 struct ContainerInitArgs {
-    char* containerDir;
-    char** commandList;
-    char** environment;
-    char* workDir;
-    char* hostname;
+    const struct tinyjailContainerParams *containerParams;
     // Pipe used by the parent to signal to the child that its namespaces are initialized and it may execve() now.
     int syncPipeWrite;
     int syncPipeRead;
@@ -68,11 +64,11 @@ static int runContainerInit(struct ContainerInitArgs *args) {
     }
 
     // Make sure the container root is a mountpoint
-    if (mount(args->containerDir, args->containerDir, "none", MS_BIND | MS_PRIVATE | MS_REC | MS_NOSUID, NULL) != 0) {
+    if (mount(args->containerParams->containerDir, args->containerParams->containerDir, "none", MS_BIND | MS_PRIVATE | MS_REC | MS_NOSUID, NULL) != 0) {
         RETURN_WITH_ERROR("Could not bind-mount container roor dir: %s", strerror(errno));
     }
     // Pivot to the filesystem root
-    if (chdir(args->containerDir) != 0) {
+    if (chdir(args->containerParams->containerDir) != 0) {
         RETURN_WITH_ERROR("Child could not chdir to container roor dir: %s", strerror(errno));
     }
     if (syscall(SYS_pivot_root, ".", ".") != 0) {
@@ -83,12 +79,12 @@ static int runContainerInit(struct ContainerInitArgs *args) {
     }
 
     // If a working directory was set, make sure to set that before execve-ing
-    if (args->workDir != NULL && chdir(args->workDir) != 0) {
+    if (args->containerParams->workDir != NULL && chdir(args->containerParams->workDir) != 0) {
         RETURN_WITH_ERROR("Child could not chdir to chosen workdir: %s", strerror(errno));
     }
 
     // Set up the hostname
-    if (sethostname(args->hostname, strlen(args->hostname)) < 0) {
+    if (sethostname(args->containerParams->hostname, strlen(args->containerParams->hostname)) < 0) {
         RETURN_WITH_ERROR("fcntl() on error pipe failed: %s", strerror(errno));
     }
 
@@ -98,7 +94,11 @@ static int runContainerInit(struct ContainerInitArgs *args) {
     }
 
     // All good, execute the target command.
-    execve(args->commandList[0], (args->commandList + 1), args->environment);
+    execve(
+        args->containerParams->commandList[0], 
+        (args->containerParams->commandList + 1), 
+        args->containerParams->environment
+    );
 
     // If we got here, the execve() call failed.
     RETURN_WITH_ERROR("execve() failed: %s", strerror(errno));
@@ -170,12 +170,11 @@ void launchContainer(
 
     // Start the child process and close the read end of the sync pipe (it is for the child process only)
     // Do not unshare the cgroup namespace just yet - the subprocess will do this, after we have moved it to the right cgroup. 
+    // Passing a pointer with local vars is safe here because we fork, so the child gets a copy of the parent's memory
+    // The child will never return from this function (actually it will use another stack entirely)
+    // and so the local memory allocated until now will never be freed in the child.
     struct ContainerInitArgs args = {
-        .containerDir = containerParams->containerDir,
-        .commandList = containerParams->commandList,
-        .environment = containerParams->environment,
-        .hostname = containerParams->hostname,
-        .workDir = containerParams->workDir,
+        .containerParams = containerParams,
         .syncPipeRead = syncPipeRead,
         .syncPipeWrite = syncPipeWrite,
         .errorPipeRead = errorPipeRead,

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <alloca.h>
+#include <stdio.h>
 
 /// @brief Allocates a locally-scoped (via alloca()) string using the provided format.
 #define ALLOC_LOCAL_FORMAT_STRING(VARNAME, FORMAT, ...) \

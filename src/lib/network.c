@@ -5,16 +5,11 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <limits.h>
 #include <sched.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
-#include <sys/prctl.h>
-#include <sys/stat.h>
 #include <sys/syscall.h>
-#include <sys/wait.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <linux/netlink.h>

@@ -58,6 +58,11 @@ struct tinyjailContainerResult tinyjailLaunchContainer(
         containerParams.gid = containerDirStat.st_gid;
     }
 
+    // Set default hostname if not specified
+    if (containerParams.hostname == NULL) {
+        containerParams.hostname = "tinyjail";
+    }
+
     // Validate container parameters
     if (containerParams.containerId && strlen(containerParams.containerId) > 12) {
         RETURN_WITH_ERROR("containerId can be at most 12 characters long.");

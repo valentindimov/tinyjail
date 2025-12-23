@@ -26,6 +26,7 @@ struct ContainerInitArgs {
     char** commandList;
     char** environment;
     char* workDir;
+    char* hostname;
     // Pipe used by the parent to signal to the child that its namespaces are initialized and it may execve() now.
     int syncPipeWrite;
     int syncPipeRead;
@@ -83,6 +84,11 @@ static int runContainerInit(struct ContainerInitArgs *args) {
     // If a working directory was set, make sure to set that before execve-ing
     if (args->workDir != NULL && chdir(args->workDir) != 0) {
         RETURN_WITH_ERROR("Child could not chdir to chosen workdir: %s", strerror(errno));
+    }
+
+    // Set up the hostname
+    if (sethostname(args->hostname, strlen(args->hostname)) < 0) {
+        RETURN_WITH_ERROR("fcntl() on error pipe failed: %s", strerror(errno));
     }
 
     // Make sure that if we successfully execve(), the errorPipeWrite is closed
@@ -171,6 +177,7 @@ void launchContainer(
         .containerDir = containerParams->containerDir,
         .commandList = containerParams->commandList,
         .environment = containerParams->environment,
+        .hostname = containerParams->hostname,
         .workDir = containerParams->workDir,
         .syncPipeRead = syncPipeRead,
         .syncPipeWrite = syncPipeWrite,

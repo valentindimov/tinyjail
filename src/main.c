@@ -48,6 +48,8 @@ int parseArgs(char** argv,
             parsedArgs->networkPeerIpAddr = *(currentArg++);
         } else if (strcmp(command, "--default-route") == 0) {
             parsedArgs->networkDefaultRoute = *(currentArg++);
+        } else if (strcmp(command, "--hostname") == 0) {
+            parsedArgs->hostname = *(currentArg++);
         } else {
             printf("Unknown argument: %s.\n", command);
             return -1;

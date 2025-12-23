@@ -33,6 +33,9 @@ struct tinyjailContainerParams {
     char* networkPeerIpAddr;
     /// @brief If networkDefaultRoute is not NULL, set the default route of the container's vEth interface to the given destination.
     char* networkDefaultRoute;
+
+    /// @brief Sets the hostname inside the container. If set to NULL, it's set to "tinyjail".
+    char* hostname;
 };
 
 // Try to keep this struct at 256 B

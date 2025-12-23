@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-// _GNU_SOURCE is needed for setns(), unshare(), clone(), and namespace-related flags for clone().
+// _GNU_SOURCE is needed for CLONE_NEW* constants
 #define _GNU_SOURCE
 
 #include <errno.h>

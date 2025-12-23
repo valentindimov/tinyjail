@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-// Needed for DT_DIR
+// _GNU_SOURCE is needed for the DT_DIR constant
 #define _GNU_SOURCE
 
 #include "cgroup.h"

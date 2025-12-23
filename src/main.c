@@ -32,6 +32,8 @@ int parseArgs(char** argv,
             break;
         } else if (strcmp(command, "--id") == 0) {
             parsedArgs->containerId = *(currentArg++);
+        } else if (strcmp(command, "--use-host-network") == 0) {
+            parsedArgs->useHostNetwork = 1;
         } else if (strcmp(command, "--root") == 0) {
             parsedArgs->containerDir = *(currentArg++);
         } else if (strcmp(command, "--env") == 0) {
@@ -78,6 +80,7 @@ int main(int argc, char** argv) {
             "[--env <key>=<value>]* "
             "[--workdir <directory>] "
             "[--cgroup <option>=<value>] "
+            "[--use-host-network] "
             "[--network-bridge <device name>] "
             "[--ip-address <address>] "
             "[--peer-ip-address <address>] "

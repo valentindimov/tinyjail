@@ -184,7 +184,11 @@ void launchContainer(
         .errorPipeRead = errorPipeRead,
         .errorPipeWrite = errorPipeWrite
     };
-    int cloneFlags = (CLONE_NEWNS | CLONE_NEWIPC | CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWUSER | CLONE_NEWTIME | CLONE_NEWNET | SIGCHLD);
+    int cloneFlags = (CLONE_NEWNS | CLONE_NEWIPC | CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWUSER | CLONE_NEWTIME | SIGCHLD);
+    // Only unshare the network namespace if useHostNetwork is not set
+    if (containerParams->useHostNetwork == 0) {
+        cloneFlags |= CLONE_NEWNET;
+    }
     // The stack memory of the child is a local 4K buffer allocated in this function. 
     // This should be enough, but in either case, the child has its own memory map so even if it overruns the buffer, it shouldn't cause problems for us.
     int childPid = clone((int (*)(void *)) runContainerInit, (void*) (((char*) alloca(4096)) + 4095), cloneFlags, (void*) &args);

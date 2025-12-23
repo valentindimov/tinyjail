@@ -167,6 +167,11 @@ int setupContainerNetwork(
     const struct tinyjailContainerParams *params,
     struct tinyjailContainerResult *result
 ) {
+    // If we're using the host network namespace, skip network setup completely
+    if (params->useHostNetwork) {
+        return 0;
+    }
+    
     if (mount("proc", params->containerDir, "proc", 0, NULL) != 0) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not mount temporary procfs: %s", strerror(errno));
         return -1;

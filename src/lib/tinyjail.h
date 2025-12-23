@@ -25,6 +25,8 @@ struct tinyjailContainerParams {
     /// @brief NULL-terminated list of "filename=value" strings that specify cgroup options like resource limits.
     char** cgroupOptions;
 
+    /// @brief Set to nonzero if the container should use the host network namespace. All other network options are ignored.
+    int useHostNetwork;
     /// @brief If networkBridgeName is not NULL, set the master of the container's vEth interface to the given bridge.
     char* networkBridgeName;
     /// @brief If networkIpAddr is not NULL, set the container's vEth interface IP address to this.

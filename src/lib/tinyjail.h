@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 
+// SPDX-License-Identifier: MIT
+
 #pragma once
 
 /// @brief Encapsulates all parameters used to run a container process.

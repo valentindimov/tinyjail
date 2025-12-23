@@ -1,5 +1,4 @@
-#include "userns.h"
-#include "utils.h"
+// SPDX-License-Identifier: MIT
 
 #include <errno.h>
 #include <fcntl.h>
@@ -14,6 +13,9 @@
 #include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+#include "userns.h"
+#include "utils.h"
 
 static int configureContainerUserNamespace(
     const char* procfsPath,

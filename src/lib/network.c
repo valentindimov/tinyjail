@@ -20,37 +20,37 @@
 #include "network.h"
 #include "utils.h"
 
-static int createVethPair(char* if1, char* if2) {
+static int createVethPair(int netlinkSocket, char* if1, char* if2) {
     // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
     ALLOC_LOCAL_FORMAT_STRING(command, "ip link add dev %s type veth peer %s", if1, if2);
     return system(command);
 }
 
-static int setMasterOfInterface(char* interface, char* master) {
+static int setMasterOfInterface(int netlinkSocket, char* interface, char* master) {
     // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
     ALLOC_LOCAL_FORMAT_STRING(command, "ip link set %s master %s", interface, master);
     return system(command);
 }
 
-static int enableInterface(char* interface) {
+static int enableInterface(int netlinkSocket, char* interface) {
     // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
     ALLOC_LOCAL_FORMAT_STRING(command, "ip link set %s up", interface);
     return system(command);
 }
 
-static int moveInterfaceToNamespaceByFd(const char* procfsPath, char* interface, int fd) {
+static int moveInterfaceToNamespaceByFd(int netlinkSocket, const char* procfsPath, char* interface, int fd) {
     // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
     ALLOC_LOCAL_FORMAT_STRING(command, "ip link set %s netns %s/self/fd/%d", interface, procfsPath, fd);
     return system(command);
 }
 
-static int addAddressToInterface(char* interface, char* address) {
+static int addAddressToInterface(int netlinkSocket, char* interface, char* address) {
     // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
     ALLOC_LOCAL_FORMAT_STRING(command, "ip addr add %s dev %s", address, interface);
     return system(command);
 }
 
-static int addDefaultRouteToInterface(char* targetAddress, char* targetInterface) {
+static int addDefaultRouteToInterface(int netlinkSocket, char* targetAddress, char* targetInterface) {
     // TODO: Do this without using the iproute2 tool (use rtnetlink directly?)
     ALLOC_LOCAL_FORMAT_STRING(command, "ip route add default via %s dev %s", targetAddress, targetInterface);
     return system(command);
@@ -90,26 +90,26 @@ static int configureNetwork(
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "setns() to enter the container network namespace failed: %s", strerror(errno));
         return -1;
     }
-    if (createVethPair(vethNameInside, vethNameOutside) != 0) {
+    if (createVethPair(netlinkSocket, vethNameInside, vethNameOutside) != 0) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Failed to create vEth pair %s-%s.", vethNameOutside, vethNameInside);
         return -1;
     }
-    if (moveInterfaceToNamespaceByFd(procfsPath, vethNameOutside, myNetNsFd) != 0) {
+    if (moveInterfaceToNamespaceByFd(netlinkSocket, procfsPath, vethNameOutside, myNetNsFd) != 0) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Failed to move interface %s to outside network namespace.", vethNameOutside);
         return -1;
     }
-    if (enableInterface(vethNameInside) != 0) {
+    if (enableInterface(netlinkSocket, vethNameInside) != 0) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Failed to enable inside interface %s.", vethNameInside);
         return -1;
     }
     if (params->networkIpAddr) {
-        if (addAddressToInterface(vethNameInside, params->networkIpAddr) != 0) {
+        if (addAddressToInterface(netlinkSocket, vethNameInside, params->networkIpAddr) != 0) {
             snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not add address %s to inside interace %s.", params->networkIpAddr, vethNameInside);
             return -1;
         }
     }
     if (params->networkDefaultRoute) {
-        if (addDefaultRouteToInterface(params->networkDefaultRoute, vethNameInside) != 0) {
+        if (addDefaultRouteToInterface(netlinkSocket, params->networkDefaultRoute, vethNameInside) != 0) {
             snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not add default route %s to inside interace %s.", params->networkDefaultRoute, vethNameInside);
             return -1;
         }
@@ -120,18 +120,18 @@ static int configureNetwork(
     }
 
     if (params->networkPeerIpAddr) {
-        if (addAddressToInterface(vethNameOutside, params->networkPeerIpAddr) != 0) {
+        if (addAddressToInterface(netlinkSocket, vethNameOutside, params->networkPeerIpAddr) != 0) {
             snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not add address %s to outside interace %s.", params->networkPeerIpAddr, vethNameOutside);
             return -1;
         }
     }
     if (params->networkBridgeName) {
-        if (setMasterOfInterface(vethNameOutside, params->networkBridgeName) != 0) {
+        if (setMasterOfInterface(netlinkSocket, vethNameOutside, params->networkBridgeName) != 0) {
             snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not attach outside interace %s to bridge %s.", vethNameOutside, params->networkBridgeName);
             return -1;
         }
     }
-    if (enableInterface(vethNameOutside) != 0) {
+    if (enableInterface(netlinkSocket, vethNameOutside) != 0) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Failed to enable outside interface %s.", vethNameOutside);
         return -1;
     }

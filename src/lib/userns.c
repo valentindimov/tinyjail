@@ -30,7 +30,7 @@ static int configureContainerUserNamespace(
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not open child process's procfs: %s.", strerror(errno));
         return -1;
     }
-    ALLOC_LOCAL_FORMAT_STRING(uidMapContents, "0 %u 1\n", containerParams->uid);
+    ALLOC_LOCAL_FORMAT_STRING(uidMapContents, "0 %ld 1\n", containerParams->uid);
     RAII_FD uidMapFd = openat(procFd, "uid_map", O_WRONLY);
     if (uidMapFd < 0 || write(uidMapFd, uidMapContents, lenuidMapContents) < lenuidMapContents) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not set uid_map for child process: %s", strerror(errno));
@@ -41,7 +41,7 @@ static int configureContainerUserNamespace(
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not set setgroups for child process: %s", strerror(errno));
         return -1;
     }
-    ALLOC_LOCAL_FORMAT_STRING(gidMapContents, "0 %u 1\n", containerParams->gid);
+    ALLOC_LOCAL_FORMAT_STRING(gidMapContents, "0 %ld 1\n", containerParams->gid);
     RAII_FD gidMapFd = openat(procFd, "gid_map", O_WRONLY);
     if (gidMapFd < 0 || write(gidMapFd, gidMapContents, lengidMapContents) < lengidMapContents) {
         snprintf(result->errorInfo, ERROR_INFO_SIZE, "Could not set gid_map for child process: %s", strerror(errno));

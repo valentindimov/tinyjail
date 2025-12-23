@@ -20,9 +20,9 @@ struct tinyjailContainerParams {
     char* workDir;
 
     /// @brief Host UID for the container to run as. If -1 is specified, the owner of the container root directory is used.
-    unsigned int uid;
+    long uid;
     /// @brief Host GID for the container to run as. If -1 is specified, the owner of the container root directory is used.
-    unsigned int gid;
+    long gid;
 
     /// @brief NULL-terminated list of "filename=value" strings that specify cgroup options like resource limits.
     char** cgroupOptions;

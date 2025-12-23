@@ -53,10 +53,10 @@ struct tinyjailContainerResult tinyjailLaunchContainer(
     if (stat(containerParams.containerDir, &containerDirStat) != 0) {
         RETURN_WITH_ERROR("Could not stat %s: %s", containerParams.containerDir, strerror(errno));
     }
-    if (containerParams.uid == -1) {
+    if (containerParams.uid < 0) {
         containerParams.uid = containerDirStat.st_uid;
     }
-    if (containerParams.gid == -1) {
+    if (containerParams.gid < 0) {
         containerParams.gid = containerDirStat.st_gid;
     }
 

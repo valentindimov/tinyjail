@@ -29,6 +29,10 @@ struct tinyjailContainerResult tinyjailLaunchContainer(
 
 #define RETURN_WITH_ERROR(...) result.containerStartedStatus = -1; snprintf(result.errorInfo, ERROR_INFO_SIZE, __VA_ARGS__); return result;
 
+    // Preliminary check - we should be root
+    if (getuid() != 0) {
+        RETURN_WITH_ERROR("tinyjail requires root permissions to run.");
+    }
     // If the container ID is NULL, generate a random 12-character hex ID
     uint64_t randInt = 0;
     getrandom(&randInt, sizeof(randInt), 0);

@@ -54,6 +54,11 @@ static int runContainerInit(struct ContainerInitArgs *args) {
     }
     close(args->syncPipeRead);
 
+    // Set our UID and GID.
+    if (setuid(0) != 0 || setgid(0) != 0) {
+        RETURN_WITH_ERROR("Child could not switch UID or GID: %s", strerror(errno));
+    }
+
     // Set the container init process to be a subreaper, since most init processes expect it.
     if (prctl(PR_SET_CHILD_SUBREAPER, 1) < 0) {
         RETURN_WITH_ERROR("Could not set container init as subreaper: %s", strerror(errno));
@@ -64,15 +69,11 @@ static int runContainerInit(struct ContainerInitArgs *args) {
         RETURN_WITH_ERROR("Unsharing cgroup namespace in child failed: %s", strerror(errno));
     }
 
-    // Set our UID and GID.
-    if (setuid(0) != 0 || setgid(0) != 0) {
-        RETURN_WITH_ERROR("Child could not switch UID or GID: %s", strerror(errno));
-    }
-
-    // Pivot to the filesystem root
+    // Make sure the container root is a mountpoint
     if (mount(args->containerDir, args->containerDir, "none", MS_BIND | MS_PRIVATE | MS_REC | MS_NOSUID, NULL) != 0) {
         RETURN_WITH_ERROR("Could not bind-mount container roor dir: %s", strerror(errno));
     }
+    // Pivot to the filesystem root
     if (chdir(args->containerDir) != 0) {
         RETURN_WITH_ERROR("Child could not chdir to container roor dir: %s", strerror(errno));
     }
@@ -142,10 +143,6 @@ void launchContainer(
     struct tinyjailContainerResult *result
 ) {
 #define RETURN_WITH_ERROR(...) result->containerStartedStatus = -1; snprintf(result->errorInfo, ERROR_INFO_SIZE, __VA_ARGS__); return;
-
-    if (getuid() != 0) {
-        RETURN_WITH_ERROR("tinyjail requires root permissions to run.");
-    }
 
     // The container launcher already sets up the mounts for the container, so it runs in its own mount namespace.
     if (unshare(CLONE_NEWNS) != 0) {

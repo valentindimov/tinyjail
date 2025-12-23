@@ -6,10 +6,21 @@
 #include <string.h>
 #include <stdlib.h>
 #include <alloca.h>
+#include <errno.h>
 
 #include "lib/tinyjail.h"
 
-int parseArgs(char** argv, 
+static int parseInt(const char* input, long* output) {
+    char *endptr = NULL;
+    *output = strtol(input, &endptr, 0);
+    if (*endptr != 0 || errno != 0) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+static int parseArgs(char** argv,
               struct tinyjailContainerParams *parsedArgs, 
               char** envStringsBuffer, 
               char** cgroupOptionsBuffer) {
@@ -42,6 +53,16 @@ int parseArgs(char** argv,
             *(cgroupOptionsBuffer++) = *(currentArg++);
         } else if (strcmp(command, "--workdir") == 0) {
             parsedArgs->workDir = *(currentArg++);
+        } else if (strcmp(command, "--uid") == 0) {
+            if (parseInt(*(currentArg++), &(parsedArgs->uid)) != 0) {
+                printf("Unable to parse --uid: %s\n", strerror(errno));
+                return 1;
+            }
+        } else if (strcmp(command, "--gid") == 0) {
+            if (parseInt(*(currentArg++), &(parsedArgs->gid)) != 0) {
+                printf("Unable to parse --gid: %s\n", strerror(errno));
+                return 1;
+            }
         } else if (strcmp(command, "--network-bridge") == 0) {
             parsedArgs->networkBridgeName = *(currentArg++);
         } else if (strcmp(command, "--ip-address") == 0) {

@@ -82,6 +82,7 @@ int main(int argc, char** argv) {
             "[--ip-address <address>] "
             "[--peer-ip-address <address>] "
             "[--default-route <address>] "
+            "[--hostname <hostname>] "
             "-- <command>\n");
         return -1;
     }
